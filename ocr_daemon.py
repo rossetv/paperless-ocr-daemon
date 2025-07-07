@@ -1,4 +1,4 @@
-#!/usr/bin/env python3  # Use the system's default Python 3 interpreter when run as a script
+#!/usr/bin/env python3
 """
 Paperless-ngx AI OCR daemon
 =========================
@@ -20,20 +20,6 @@ Key features
   * Watermarks ⇒ `[Watermark: <text>]` or `[Watermark]`
 * Multi‑page PDFs are processed **in parallel** (`WORKERS` threads).
 * Robust retries with exponential back‑off & jitter.
-
-Environment variables
-~~~~~~~~~~~~~~~~~~
-```
-PAPERLESS_URL    Base URL of Paperless‑ngx          (default http://paperless:8000)
-PAPERLESS_TOKEN  API token                          (required)
-OPENAI_API_KEY   API key for OpenAI                 (required)
-POLL_INTERVAL    Seconds between inbox polls        (default 15)
-PRE_TAG_ID       ID of the pre‑OCR tag              (default 443)
-POST_TAG_ID      ID of the post‑OCR tag             (default 444)
-OCR_DPI          DPI when rasterising PDFs          (default 300)
-OCR_MAX_SIDE     Long‑edge of thumbnail in pixels   (default 1600)
-WORKERS          Concurrent OCR threads per doc     (default 8)
-```
 """
 
 # ——— Standard library imports ———
@@ -55,8 +41,18 @@ PAPERLESS_URL   = os.getenv("PAPERLESS_URL", "http://paperless:8000").rstrip("/"
 PAPERLESS_TOKEN = os.environ["PAPERLESS_TOKEN"]  # Required – will raise KeyError if missing
 OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]   # Required – will raise KeyError if missing
 
-PRIMARY_MODEL   = "o4-mini"   # Preferred Vision‑capable model name
-FALLBACK_MODEL  = "gpt-4.1"   # Secondary model if the first one refuses
+# LLM Selection
+LLM_PROVIDER = "openai"  # "ollama" or "openai"
+
+if LLM_PROVIDER == "ollama":
+    openai.base_url = "http://192.168.1.110:11434/v1/"
+    openai.api_key  = "dummy"
+    PRIMARY_MODEL   = "gemma3:12b"
+    FALLBACK_MODEL  = "gemma3:12b"
+else:
+    openai.api_key = OPENAI_API_KEY
+    PRIMARY_MODEL   = "o4-mini"
+    FALLBACK_MODEL  = "gpt-4o"
 
 # Tags used by Paperless‑ngx to mark processing state
 PRE_TAG_ID  = int(os.getenv("PRE_TAG_ID", 443))  # Documents waiting for OCR
@@ -73,13 +69,19 @@ MAX_WORKERS   = max(1, int(os.getenv("WORKERS", 8)))  # Parallel OCR threads for
 
 REFUSAL_MARK  = "CHATGPT REFUSED TO TRANSCRIBE"  # Placeholder content when every model refuses
 
+# ───────── LOGGING ─────────
+# Basic log configuration – prints timestamp, level, module:line and the message.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s %(name)s:%(lineno)-3d ▶ %(message)s",
+)
+log = logging.getLogger("ocr-daemon")  # Named logger so we can filter it separately if desired
+
 # ───────── SESSION / SDK ─────────
 # Create a single Requests session so connections can be reused (faster & fewer TCP handshakes)
 _SESSION = requests.Session()
 _SESSION.headers.update({"Authorization": f"Token {PAPERLESS_TOKEN}"})  # Paperless‑ngx uses token auth
 
-# Configure OpenAI client globally
-openai.api_key = OPENAI_API_KEY
 # Disable Pillow's safety check that prevents huge images – PDFs may be large.
 Image.MAX_IMAGE_PIXELS = None
 
@@ -116,14 +118,6 @@ TRANSCRIPTION_PROMPT = (
 
 def _is_refusal(text: str) -> bool:
     return "i can't assist" in text.lower()
-
-# ───────── LOGGING ─────────
-# Basic log configuration – prints timestamp, level, module:line and the message.
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s:%(lineno)-3d ▶ %(message)s",
-)
-log = logging.getLogger("ocr-daemon")  # Named logger so we can filter it separately if desired
 
 # ───────── helpers & retry ─────────
 
@@ -317,9 +311,9 @@ def process_document(doc: dict) -> None:
 
 def run_daemon() -> None:
     """Main loop – continually poll Paperless and process new documents."""
-    log.info("Start daemon (pre=%d post=%d poll=%ds dpi=%d thumb=%dpx workers=%d)",
+    log.info("Starting daemon (pre=%d post=%d poll=%ds dpi=%d thumb=%dpx workers=%d llm=%s)",
              PRE_TAG_ID, POST_TAG_ID, POLL_INTERVAL_SECONDS,
-             DPI, THUMB_SIDE_PX, MAX_WORKERS)
+             DPI, THUMB_SIDE_PX, MAX_WORKERS, LLM_PROVIDER)
     while True:
         try:
             for doc in get_documents_with_tag(PRE_TAG_ID, POST_TAG_ID):
