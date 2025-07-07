@@ -47,7 +47,7 @@ LLM_PROVIDER = "openai"  # "ollama" or "openai"
 if LLM_PROVIDER == "ollama":
     openai.base_url = "http://192.168.1.110:11434/v1/"
     openai.api_key  = "dummy"
-    PRIMARY_MODEL   = "gemma3:12b"
+    PRIMARY_MODEL   = "gemma3:27b"
     FALLBACK_MODEL  = "gemma3:12b"
 else:
     openai.api_key = OPENAI_API_KEY
