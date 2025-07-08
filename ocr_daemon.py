@@ -2,9 +2,9 @@
 """
 Paperless-ngx AI OCR daemon
 =========================
-Continuously polls Paperless-ngx for documents tagged with a pre-OCR tag (ID 443),
+Continuously polls Paperless-ngx for documents tagged with a pre-OCR tag (ID 443),
 submits every page to OpenAI Vision for transcription, saves the raw plain‑text
-back to the document, then swaps the tag to the post-OCR tag (ID 444) so that
+back to the document, then swaps the tag to the post-OCR tag (ID 444) so that
 Downstream rules can classify the content.
 
 Key features
@@ -121,7 +121,7 @@ def _is_refusal(text: str) -> bool:
 # ───────── helpers & retry ─────────
 
 def _sleep_backoff(attempt: int) -> None:
-    """Sleep for ~30 seconds ±10 % before the next retry."""
+    """Sleep for ~30 seconds ±10 % before the next retry."""
     delay = 30 * random.uniform(0.9, 1.1)   # Jitter spreads out retries to avoid thundering herd
     log.info("Sleeping %.1f s before retry %d/%d", delay, attempt, MAX_RETRIES)
     time.sleep(delay)
@@ -188,7 +188,7 @@ def file_to_images(path: str, ctype: str):
 
 def _blank(img: Image.Image, threshold: int = 5) -> bool:
     """Return ``True`` if *img* looks essentially blank (all white)."""
-    hist = img.convert("L").histogram()  # Greyscale histogram – index 255 is pure white
+    hist = img.convert("L").histogram()  # Greyscale histogram – index 255 is pure white
     return (sum(hist) - hist[255]) < threshold
 
 # ───────── OCR with two‑strike logic ─────────
@@ -224,7 +224,9 @@ def transcribe_image(img: Image.Image) -> Tuple[str, str]:
         if model == "gpt-4.1":
             # Only the official gpt‑4.1 endpoint supports zero temperature (fully deterministic output)
             params["temperature"] = 0
-            
+        if LLM_PROVIDER == "ollama":
+            params["think"] = False
+
         rsp = retry(lambda: openai.chat.completions.create(**params))
         text = rsp.choices[0].message.content.strip()
 
