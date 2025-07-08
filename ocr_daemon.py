@@ -39,7 +39,6 @@ from PIL import Image, UnidentifiedImageError     # Python Imaging Library (Pill
 # Read configuration from environment variables so that nothing is hard‑coded.
 PAPERLESS_URL   = os.getenv("PAPERLESS_URL", "http://paperless:8000").rstrip("/")
 PAPERLESS_TOKEN = os.environ["PAPERLESS_TOKEN"]  # Required – will raise KeyError if missing
-OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]   # Required – will raise KeyError if missing
 
 # LLM Selection
 LLM_PROVIDER = "openai"  # "ollama" or "openai"
@@ -50,7 +49,7 @@ if LLM_PROVIDER == "ollama":
     PRIMARY_MODEL   = "gemma3:27b"
     FALLBACK_MODEL  = "gemma3:12b"
 else:
-    openai.api_key = OPENAI_API_KEY
+    openai.api_key = os.environ["OPENAI_API_KEY"]
     PRIMARY_MODEL   = "o4-mini"
     FALLBACK_MODEL  = "gpt-4o"
 
