@@ -50,8 +50,8 @@ if LLM_PROVIDER == "ollama":
     FALLBACK_MODEL  = "gemma3:12b"
 else:
     openai.api_key = os.environ["OPENAI_API_KEY"]
-    PRIMARY_MODEL   = "o4-mini"
-    FALLBACK_MODEL  = "gpt-4o"
+    PRIMARY_MODEL   = "gpt-5-mini"
+    FALLBACK_MODEL  = "o4-mini"
 
 # Tags used by Paperless‑ngx to mark processing state
 PRE_TAG_ID  = int(os.getenv("PRE_TAG_ID", 443))  # Documents waiting for OCR
