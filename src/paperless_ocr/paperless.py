@@ -12,7 +12,6 @@ The `PaperlessClient` class is designed to be a reusable and testable
 component that abstracts away the details of the Paperless-ngx REST API.
 """
 
-import tempfile
 from typing import Generator, Iterable
 
 import requests
@@ -64,22 +63,19 @@ class PaperlessClient:
             if self.settings.POST_TAG_ID not in doc.get("tags", [])
         )
 
-    def download_file(self, doc_id: int) -> tuple[str, str]:
+    def download_content(self, doc_id: int) -> tuple[bytes, str]:
         """
-        Download a document and save it to a temporary file.
+        Download the content of a document from Paperless.
 
-        Returns a tuple (path, content_type) so we know whether it is a PDF or an image.
+        Returns a tuple containing the raw file content as bytes and the content type.
+        This method is a pure network operation and does not interact with the filesystem.
         """
         url = f"{self.settings.PAPERLESS_URL}/api/documents/{doc_id}/download/"
         response = self._get(url)
         response.raise_for_status()
 
         content_type = response.headers.get("Content-Type", "application/pdf")
-        extension = ".pdf" if "pdf" in content_type else ".bin"
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as temp_file:
-            temp_file.write(response.content)
-            return temp_file.name, content_type
+        return response.content, content_type
 
     def update_document(self, doc_id: int, content: str, new_tags: list[int]) -> None:
         """

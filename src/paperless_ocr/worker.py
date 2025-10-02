@@ -18,6 +18,7 @@ designed to be instantiated for each document that needs processing.
 import datetime as dt
 import logging
 import os
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import IO, List
 
@@ -60,23 +61,29 @@ class DocumentProcessor:
         log.info("Processing #%d - %s", self.doc_id, self.title)
         start_time = dt.datetime.now()
 
-        temp_path, content_type = self.paperless_client.download_file(self.doc_id)
-        try:
-            images = self._file_to_images(temp_path, content_type)
-            if not images:
-                log.warning("Document #%d has no pages to process.", self.doc_id)
-                return
+        content, content_type = self.paperless_client.download_content(self.doc_id)
+        extension = ".pdf" if "pdf" in content_type else ".bin"
 
-            page_results = self._ocr_pages_in_parallel(images)
+        with tempfile.NamedTemporaryFile(
+            delete=True, suffix=extension
+        ) as temp_file:
+            temp_file.write(content)
+            temp_file.flush()  # Ensure content is written to disk
 
-            full_text, models_used = self._assemble_full_text(images, page_results)
+            images = self._file_to_images(temp_file.name, content_type)
 
-            self._update_paperless_document(full_text, models_used)
+        if not images:
+            log.warning("Document #%d has no pages to process.", self.doc_id)
+            return
 
-            elapsed_time = (dt.datetime.now() - start_time).total_seconds()
-            log.info("Finished #%d in %.2f s", self.doc_id, elapsed_time)
-        finally:
-            self._cleanup_temp_file(temp_path)
+        page_results = self._ocr_pages_in_parallel(images)
+
+        full_text, models_used = self._assemble_full_text(images, page_results)
+
+        self._update_paperless_document(full_text, models_used)
+
+        elapsed_time = (dt.datetime.now() - start_time).total_seconds()
+        log.info("Finished #%d in %.2f s", self.doc_id, elapsed_time)
 
     def _file_to_images(self, path: str, content_type: str) -> list[Image.Image]:
         """Convert the downloaded file to a list of PIL.Image instances."""
@@ -147,12 +154,3 @@ class DocumentProcessor:
             self.settings.PRE_TAG_ID,
             self.settings.POST_TAG_ID,
         )
-
-    def _cleanup_temp_file(self, path: str) -> None:
-        """
-        Delete the temporary file, even on errors.
-        """
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass

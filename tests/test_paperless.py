@@ -65,9 +65,9 @@ def test_get_documents_to_process(paperless_client, settings, requests_mock):
     assert docs[1]["id"] == 3
 
 
-def test_download_file(paperless_client, settings, requests_mock):
+def test_download_content(paperless_client, settings, requests_mock):
     """
-    Test that a file is correctly downloaded and saved to a temporary file.
+    Test that file content is correctly downloaded.
     """
     doc_id = 1
     file_content = b"This is a test PDF."
@@ -77,14 +77,10 @@ def test_download_file(paperless_client, settings, requests_mock):
         headers={"Content-Type": "application/pdf"},
     )
 
-    temp_path, content_type = paperless_client.download_file(doc_id)
+    content, content_type = paperless_client.download_content(doc_id)
 
     assert content_type == "application/pdf"
-    with open(temp_path, "rb") as f:
-        assert f.read() == file_content
-
-    # Clean up the temporary file
-    os.remove(temp_path)
+    assert content == file_content
 
 
 def test_update_document(paperless_client, settings, requests_mock):

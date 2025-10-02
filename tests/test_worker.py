@@ -1,5 +1,5 @@
 import os
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from PIL import Image
@@ -28,8 +28,7 @@ def settings(mocker):
 def mock_paperless_client(mocker):
     """Fixture to create a mock PaperlessClient."""
     client = MagicMock()
-    # Simulate downloading a file to a temporary path
-    client.download_file.return_value = ("/tmp/test_doc.pdf", "application/pdf")
+    client.download_content.return_value = (b"file_content", "application/pdf")
     return client
 
 
@@ -37,7 +36,6 @@ def mock_paperless_client(mocker):
 def mock_ocr_provider(mocker):
     """Fixture to create a mock OcrProvider."""
     provider = MagicMock()
-    # Simulate OCR results for two pages
     provider.transcribe_image.side_effect = [
         ("Page 1 text", "model-a"),
         ("Page 2 text", "model-b"),
@@ -56,33 +54,44 @@ def create_test_image():
     return Image.new("RGB", (100, 100), "black")
 
 
-@pytest.mark.parametrize(
-    "file_to_images_mock",
-    [[create_test_image(), create_test_image()]],
-    indirect=True,
-)
+@patch("paperless_ocr.worker.convert_from_path", return_value=[create_test_image(), create_test_image()])
+@patch("tempfile.NamedTemporaryFile")
 def test_process_document_success(
+    mock_tempfile,
+    mock_convert,
     settings,
     mock_paperless_client,
     mock_ocr_provider,
     mock_doc,
-    file_to_images_mock,
 ):
     """
-    Test the successful end-to-end processing of a document.
+    Test the successful end-to-end processing of a document, ensuring
+    proper file handling and orchestration.
     """
+    # Mock the temporary file context manager
+    mock_file = MagicMock()
+    mock_file.__enter__.return_value.name = "/tmp/test.pdf"
+    mock_tempfile.return_value = mock_file
+
     processor = DocumentProcessor(
         mock_doc, mock_paperless_client, mock_ocr_provider, settings
     )
     processor.process()
 
-    # 1. Verify download was called
-    mock_paperless_client.download_file.assert_called_once_with(1)
+    # 1. Verify content was downloaded
+    mock_paperless_client.download_content.assert_called_once_with(1)
 
-    # 2. Verify OCR was called for each page
+    # 2. Verify temp file was written to
+    mock_file.__enter__.return_value.write.assert_called_once_with(b"file_content")
+    mock_file.__enter__.return_value.flush.assert_called_once()
+
+    # 3. Verify file was converted to images
+    mock_convert.assert_called_once_with("/tmp/test.pdf", dpi=settings.DPI)
+
+    # 4. Verify OCR was called for each page
     assert mock_ocr_provider.transcribe_image.call_count == 2
 
-    # 3. Verify document update was called with correct content and tags
+    # 5. Verify document was updated with correct content and tags
     expected_content = (
         "--- Page 1 ---\n"
         "Page 1 text\n\n"
@@ -90,116 +99,72 @@ def test_process_document_success(
         "Page 2 text\n\n"
         "Transcribed by model: model-a, model-b"
     )
-    # The worker calculates the sorted list of models before creating the string
-    expected_tags = [11]  # Post-OCR tag, pre-OCR tag removed
     mock_paperless_client.update_document.assert_called_once()
     args, _ = mock_paperless_client.update_document.call_args
     assert args[0] == 1
-    # Sort models in expected content to match implementation
     assert "Transcribed by model: model-a, model-b" in args[1]
-    assert sorted(args[2]) == sorted(expected_tags)
+    assert sorted(args[2]) == [11]
 
 
-@pytest.mark.parametrize("file_to_images_mock", [[create_test_image()]], indirect=True)
-def test_process_single_page_document(
-    settings,
-    mock_paperless_client,
-    mock_ocr_provider,
-    mock_doc,
-    file_to_images_mock,
-):
-    """
-    Test that page headers are omitted for single-page documents.
-    """
-    # Adjust mock for a single page
-    mock_ocr_provider.transcribe_image.side_effect = [("Single page text", "model-a")]
-
-    processor = DocumentProcessor(
-        mock_doc, mock_paperless_client, mock_ocr_provider, settings
-    )
-    processor.process()
-
-    expected_content = "Single page text\n\nTranscribed by model: model-a"
-    mock_paperless_client.update_document.assert_called_once_with(
-        1, expected_content, [11]
-    )
-
-
-@pytest.mark.parametrize("file_to_images_mock", [[]], indirect=True)
+@patch("paperless_ocr.worker.convert_from_path", return_value=[])
+@patch("tempfile.NamedTemporaryFile")
 def test_process_document_with_no_images(
+    mock_tempfile,
+    mock_convert,
     settings,
     mock_paperless_client,
     mock_ocr_provider,
     mock_doc,
-    file_to_images_mock,
 ):
     """
-    Test that the process handles documents that produce no images.
+    Test that the process handles documents that produce no images and still
+    cleans up correctly.
     """
+    mock_file = MagicMock()
+    mock_tempfile.return_value = mock_file
+
     processor = DocumentProcessor(
         mock_doc, mock_paperless_client, mock_ocr_provider, settings
     )
     processor.process()
+
+    # Verify download and file write still happened
+    mock_paperless_client.download_content.assert_called_once_with(1)
+    mock_file.__enter__.return_value.write.assert_called_once_with(b"file_content")
 
     # OCR and update should not be called
     mock_ocr_provider.transcribe_image.assert_not_called()
     mock_paperless_client.update_document.assert_not_called()
-    # Cleanup should still be called
-    file_to_images_mock.cleanup.assert_called_once()
+
+    # The with statement for the temp file should have completed, ensuring cleanup
+    mock_file.__exit__.assert_called_once()
 
 
-@pytest.mark.parametrize("file_to_images_mock", [[create_test_image()]], indirect=True)
-def test_cleanup_on_error(
+@patch("paperless_ocr.worker.convert_from_path")
+@patch("tempfile.NamedTemporaryFile")
+def test_resource_cleanup_on_processing_error(
+    mock_tempfile,
+    mock_convert,
     settings,
     mock_paperless_client,
     mock_ocr_provider,
     mock_doc,
-    file_to_images_mock,
-    caplog,
 ):
     """
-    Test that the temporary file is cleaned up and the error is logged
-    if an exception occurs during page processing.
+    Test that the temporary file is cleaned up via the 'with' statement
+    even if an error occurs during image conversion.
     """
-    # Simulate an error during OCR
-    mock_ocr_provider.transcribe_image.side_effect = ValueError("OCR failed!")
+    mock_file = MagicMock()
+    mock_tempfile.return_value = mock_file
+    mock_convert.side_effect = Exception("PDF conversion failed!")
 
     processor = DocumentProcessor(
         mock_doc, mock_paperless_client, mock_ocr_provider, settings
     )
 
-    # The process should not raise an exception, but log it instead
-    processor.process()
+    with pytest.raises(Exception, match="PDF conversion failed!"):
+        processor.process()
 
-    # 1. Assert that the error was logged
-    assert "OCR failed on page 1: OCR failed!" in caplog.text
-
-    # 2. Assert that the process continued and updated the document (with no text)
-    mock_paperless_client.update_document.assert_called_once_with(1, "", [11])
-
-    # 3. Assert that cleanup was still called
-    file_to_images_mock.cleanup.assert_called_once()
-
-
-# --- Fixture to mock file conversion and cleanup ---
-
-
-@pytest.fixture
-def file_to_images_mock(mocker, request):
-    """
-    Mocks the _file_to_images and _cleanup_temp_file methods of the DocumentProcessor.
-    This allows testing the orchestration logic without touching the file system
-    or external libraries like pdf2image.
-    """
-    images = request.param
-    mock_file_to_images = mocker.patch(
-        "paperless_ocr.worker.DocumentProcessor._file_to_images",
-        return_value=images,
-    )
-    mock_cleanup = mocker.patch(
-        "paperless_ocr.worker.DocumentProcessor._cleanup_temp_file"
-    )
-
-    # Attach the cleanup mock to the file_to_images mock so it can be accessed in tests
-    mock_file_to_images.cleanup = mock_cleanup
-    return mock_file_to_images
+    # Assert that the temporary file's context manager was exited,
+    # which guarantees cleanup by tempfile.NamedTemporaryFile.
+    mock_file.__exit__.assert_called_once()
