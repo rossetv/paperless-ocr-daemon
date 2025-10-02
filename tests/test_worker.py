@@ -86,7 +86,7 @@ def test_process_document_success(
     mock_file.__enter__.return_value.flush.assert_called_once()
 
     # 3. Verify file was converted to images
-    mock_convert.assert_called_once_with("/tmp/test.pdf", dpi=settings.DPI)
+    mock_convert.assert_called_once_with("/tmp/test.pdf", dpi=settings.OCR_DPI)
 
     # 4. Verify OCR was called for each page
     assert mock_ocr_provider.transcribe_image.call_count == 2

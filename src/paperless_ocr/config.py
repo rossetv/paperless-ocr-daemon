@@ -9,7 +9,6 @@ throughout the application.
 """
 
 import os
-import inspect
 from typing import Literal
 
 import openai
@@ -42,20 +41,21 @@ class Settings:
     POST_TAG_ID: int
 
     # --- Daemon Configuration ---
-    POLL_INTERVAL_SECONDS: int
+    POLL_INTERVAL: int
     MAX_RETRIES: int
     REQUEST_TIMEOUT: int
 
     # --- Image Processing Configuration ---
-    DPI: int
-    THUMB_SIDE_PX: int
-    MAX_WORKERS: int
+    OCR_DPI: int
+    OCR_MAX_SIDE: int
+    WORKERS: int
+
+    # --- Logging ---
+    LOG_LEVEL: str
+    LOG_FORMAT: Literal["json", "console"]
 
     # --- Constants ---
     REFUSAL_MARK: str = "CHATGPT REFUSED TO TRANSCRIBE"
-
-    # --- SDK specific ---
-    TIMEOUT_KW: str
 
     def __init__(self):
         """
@@ -87,26 +87,25 @@ class Settings:
             self.FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "o4-mini")
 
         # --- Paperless-ngx Tag IDs ---
-        self.PRE_TAG_ID = int(os.getenv("PRE_TAG_ID", 443))
-        self.POST_TAG_ID = int(os.getenv("POST_TAG_ID", 444))
+        self.PRE_TAG_ID = int(os.getenv("PRE_TAG_ID", "443"))
+        self.POST_TAG_ID = int(os.getenv("POST_TAG_ID", "444"))
 
         # --- Daemon Configuration ---
-        self.POLL_INTERVAL_SECONDS = int(os.getenv("POLL_INTERVAL", 15))
-        self.MAX_RETRIES = int(os.getenv("MAX_RETRIES", 20))
-        self.REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", 180))
+        self.POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "15"))
+        self.MAX_RETRIES = int(os.getenv("MAX_RETRIES", "20"))
+        self.REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "180"))
 
         # --- Image Processing Configuration ---
-        self.DPI = int(os.getenv("OCR_DPI", 300))
-        self.THUMB_SIDE_PX = int(os.getenv("OCR_MAX_SIDE", 1600))
-        self.MAX_WORKERS = max(1, int(os.getenv("WORKERS", 8)))
+        self.OCR_DPI = int(os.getenv("OCR_DPI", "300"))
+        self.OCR_MAX_SIDE = int(os.getenv("OCR_MAX_SIDE", "1600"))
+        self.WORKERS = max(1, int(os.getenv("WORKERS", "8")))
 
-        # Determine the correct timeout keyword for the OpenAI SDK
-        self.TIMEOUT_KW = (
-            "timeout"
-            if "timeout"
-            in inspect.signature(openai.chat.completions.create).parameters
-            else "request_timeout"
-        )
+        # --- Logging ---
+        self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+        log_format = os.getenv("LOG_FORMAT", "console")
+        if log_format not in ("json", "console"):
+            raise ValueError("LOG_FORMAT must be 'json' or 'console'")
+        self.LOG_FORMAT = log_format
 
     def _get_required_env(self, var_name: str) -> str:
         """
