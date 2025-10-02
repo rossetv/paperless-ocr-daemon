@@ -6,9 +6,9 @@ build-backend = "setuptools.build_meta"
 name = "paperless-ocr"
 version = "1.0.0"
 dependencies = [
-    "requests==2.31.0",
+    "requests==2.32.4",
     "openai==1.12.0",
-    "Pillow==10.1.0",
+    "Pillow==10.3.0",
     "pdf2image==1.16.3",
     "structlog==24.1.0",
 ]
