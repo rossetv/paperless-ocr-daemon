@@ -14,17 +14,17 @@ from the main document processing pipeline.
 """
 
 import base64
-import logging
 from abc import ABC, abstractmethod
 from io import BytesIO
 
 import openai
+import structlog
 from PIL import Image
 
 from .config import Settings
 from .utils import is_blank, retry
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 TRANSCRIPTION_PROMPT = """
 You are an OCR engine in a document processing system. The user has full legal
@@ -82,7 +82,7 @@ class OpenAIProvider(OcrProvider):
             return "", ""  # Skip empty pages
 
         # Resize large images to reduce token cost and latency
-        image.thumbnail((self.settings.THUMB_SIDE_PX, self.settings.THUMB_SIDE_PX))
+        image.thumbnail((self.settings.OCR_MAX_SIDE, self.settings.OCR_MAX_SIDE))
         buffer = BytesIO()
         image.save(buffer, format="PNG")
         payload = base64.b64encode(buffer.getvalue()).decode()
@@ -109,7 +109,7 @@ class OpenAIProvider(OcrProvider):
             params = {
                 "model": model,
                 "messages": messages,
-                self.settings.TIMEOUT_KW: self.settings.REQUEST_TIMEOUT,
+                "timeout": self.settings.REQUEST_TIMEOUT,
             }
             try:
                 response = self._create_completion(**params)
@@ -118,13 +118,13 @@ class OpenAIProvider(OcrProvider):
                 if not _is_refusal(text):
                     return text, model  # Success
                 else:
-                    log.warning("Model %s refused to transcribe.", model)
+                    log.warning("Model refused to transcribe", model=model)
             except openai.APIError as e:
                 log.warning(
-                    "API call for model %s failed after all retries: %s", model, e
+                    "API call for model failed after all retries", model=model, error=e
                 )
                 # Continue to the next model in the loop
                 continue
 
-        log.error("Both models failed or refused to transcribe the page.")
+        log.error("Both models failed or refused to transcribe the page")
         return self.settings.REFUSAL_MARK, ""  # All models failed

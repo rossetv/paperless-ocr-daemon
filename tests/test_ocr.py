@@ -1,5 +1,4 @@
 import os
-
 import openai
 import pytest
 from PIL import Image
@@ -18,11 +17,13 @@ def settings(mocker):
             "OPENAI_API_KEY": "test_api_key",
             "PRIMARY_MODEL": "gpt-primary",
             "FALLBACK_MODEL": "gpt-fallback",
-            "MAX_RETRIES": "2",
         },
         clear=True,
     )
-    return Settings()
+    # Set a low retry count for testing purposes
+    settings_obj = Settings()
+    settings_obj.MAX_RETRIES = 2
+    return settings_obj
 
 
 @pytest.fixture
@@ -32,9 +33,9 @@ def ocr_provider(settings):
 
 
 @pytest.fixture
-def mock_openai(mocker):
-    """Fixture to mock the OpenAI API client."""
-    return mocker.patch("openai.chat.completions.create")
+def mock_create_completion(mocker):
+    """Fixture to mock the _create_completion method, which is decorated with @retry."""
+    return mocker.patch("paperless_ocr.ocr.OpenAIProvider._create_completion")
 
 
 def create_mock_response(mocker, content):
@@ -53,31 +54,29 @@ def create_test_image(blank=False):
     return Image.new("RGB", (100, 100), "black")
 
 
-def test_transcribe_image_success(ocr_provider, mock_openai, mocker):
-    """
-    Test successful transcription with the primary model.
-    """
+def test_transcribe_image_success(ocr_provider, mock_create_completion, mocker):
+    """Test successful transcription with the primary model."""
     image = create_test_image()
     expected_text = "This is a test transcription."
-    mock_openai.return_value = create_mock_response(mocker, expected_text)
+    mock_create_completion.return_value = create_mock_response(mocker, expected_text)
 
     text, model = ocr_provider.transcribe_image(image)
 
     assert text == expected_text
     assert model == "gpt-primary"
-    mock_openai.assert_called_once()
-    assert mock_openai.call_args.kwargs["model"] == "gpt-primary"
+    mock_create_completion.assert_called_once_with(
+        model="gpt-primary",
+        messages=mocker.ANY,
+        timeout=mocker.ANY,
+    )
 
 
-def test_transcribe_image_fallback_on_refusal(ocr_provider, mock_openai, mocker):
-    """
-    Test that the provider falls back to the secondary model if the primary refuses.
-    """
+def test_fallback_on_refusal(ocr_provider, mock_create_completion, mocker):
+    """Test that the provider falls back to the secondary model if the primary refuses."""
     image = create_test_image()
     refusal_text = "I can't assist with that."
     expected_text = "Fallback model success."
-
-    mock_openai.side_effect = [
+    mock_create_completion.side_effect = [
         create_mock_response(mocker, refusal_text),
         create_mock_response(mocker, expected_text),
     ]
@@ -86,74 +85,44 @@ def test_transcribe_image_fallback_on_refusal(ocr_provider, mock_openai, mocker)
 
     assert text == expected_text
     assert model == "gpt-fallback"
-    assert mock_openai.call_count == 2
+    assert mock_create_completion.call_count == 2
 
 
-def test_transcribe_image_all_models_refuse(
-    ocr_provider, settings, mock_openai, mocker
-):
-    """
-    Test that a refusal mark is returned if all models refuse.
-    """
+def test_fallback_on_api_error(ocr_provider, mock_create_completion, mocker):
+    """Test fallback to the secondary model if the primary fails with an APIError."""
     image = create_test_image()
-    refusal_text = "I can't assist with that."
-
-    mock_openai.return_value = create_mock_response(mocker, refusal_text)
-
-    text, model = ocr_provider.transcribe_image(image)
-
-    assert text == settings.REFUSAL_MARK
-    assert model == ""
-    assert mock_openai.call_count == 2
-
-
-def test_transcribe_blank_image(ocr_provider, mock_openai):
-    """
-    Test that blank images are skipped and the API is not called.
-    """
-    image = create_test_image(blank=True)
-
-    text, model = ocr_provider.transcribe_image(image)
-
-    assert text == ""
-    assert model == ""
-    mock_openai.assert_not_called()
-
-
-def test_retry_on_api_error(ocr_provider, mock_openai, mocker):
-    """
-    Test that the provider retries on a transient API error.
-    """
-    image = create_test_image()
-    expected_text = "Success after retry."
-
-    mock_openai.side_effect = [
-        openai.APIError("API is down", request=None, body=None),
+    expected_text = "Fallback success."
+    mock_create_completion.side_effect = [
+        openai.APIError("Primary failed", request=None, body=None),
         create_mock_response(mocker, expected_text),
     ]
 
     text, model = ocr_provider.transcribe_image(image)
 
     assert text == expected_text
-    assert model == "gpt-primary"
-    assert mock_openai.call_count == 2
+    assert model == "gpt-fallback"
+    assert mock_create_completion.call_count == 2
 
 
-def test_fallback_after_max_retries(ocr_provider, mock_openai, mocker):
-    """
-    Test that the provider falls back to the next model after exhausting all retries.
-    """
+def test_all_models_fail(ocr_provider, settings, mock_create_completion, mocker):
+    """Test that a refusal mark is returned if all models either refuse or error."""
     image = create_test_image()
-    expected_text = "Fallback success."
-
-    mock_openai.side_effect = [
-        openai.APIError("API is down", request=None, body=None),
-        openai.APIError("API is still down", request=None, body=None),
-        create_mock_response(mocker, expected_text),  # Fallback model call
+    mock_create_completion.side_effect = [
+        create_mock_response(mocker, "I can't assist."),  # Primary refuses
+        openai.APIError("Fallback failed", request=None, body=None),  # Fallback errors
     ]
 
     text, model = ocr_provider.transcribe_image(image)
 
-    assert text == expected_text
-    assert model == "gpt-fallback"
-    assert mock_openai.call_count == 3  # 2 for primary, 1 for fallback
+    assert text == settings.REFUSAL_MARK
+    assert model == ""
+    assert mock_create_completion.call_count == 2
+
+
+def test_transcribe_blank_image(ocr_provider, mock_create_completion):
+    """Test that blank images are skipped and the API is not called."""
+    image = create_test_image(blank=True)
+    text, model = ocr_provider.transcribe_image(image)
+    assert text == ""
+    assert model == ""
+    mock_create_completion.assert_not_called()

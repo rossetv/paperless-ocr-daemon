@@ -16,23 +16,15 @@ throughput. The configuration is managed through environment variables,
 allowing for flexible deployment in various environments.
 """
 
-import logging
 import time
 
+import structlog
+
 from .config import Settings, setup_libraries
+from .logging_config import configure_logging
 from .ocr import OpenAIProvider
 from .paperless import PaperlessClient
 from .worker import DocumentProcessor
-
-
-def setup_logging() -> None:
-    """
-    Configures basic logging for the application.
-    """
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(name)s:%(lineno)-3d ▶ %(message)s",
-    )
 
 
 def main() -> None:
@@ -42,25 +34,25 @@ def main() -> None:
     This function continuously polls Paperless-ngx for new documents to process,
     and then hands them off to a `DocumentProcessor` instance.
     """
-    setup_logging()
-    log = logging.getLogger(__name__)
+    log = structlog.get_logger(__name__)
 
     try:
         settings = Settings()
+        configure_logging(settings)
         setup_libraries(settings)
     except ValueError as e:
-        log.error(f"Configuration error: {e}")
+        log.error("Configuration error", error=e)
         return
 
     log.info(
-        "Starting daemon (pre=%d post=%d poll=%ds dpi=%d thumb=%dpx workers=%d llm=%s)",
-        settings.PRE_TAG_ID,
-        settings.POST_TAG_ID,
-        settings.POLL_INTERVAL_SECONDS,
-        settings.DPI,
-        settings.THUMB_SIDE_PX,
-        settings.MAX_WORKERS,
-        settings.LLM_PROVIDER,
+        "Starting daemon",
+        pre_tag_id=settings.PRE_TAG_ID,
+        post_tag_id=settings.POST_TAG_ID,
+        poll_interval=settings.POLL_INTERVAL,
+        ocr_dpi=settings.OCR_DPI,
+        ocr_max_side=settings.OCR_MAX_SIDE,
+        workers=settings.WORKERS,
+        llm_provider=settings.LLM_PROVIDER,
     )
 
     paperless_client = PaperlessClient(settings)
@@ -75,15 +67,15 @@ def main() -> None:
                         doc, paperless_client, ocr_provider, settings
                     )
                     processor.process()
-                except Exception as e:
-                    log.exception("Failed to process document %s: %s", doc.get("id"), e)
-            time.sleep(settings.POLL_INTERVAL_SECONDS)
+                except Exception:
+                    log.exception("Failed to process document", doc_id=doc.get("id"))
+            time.sleep(settings.POLL_INTERVAL)
         except KeyboardInterrupt:
             log.info("Ctrl-C received, exiting.")
             break
-        except Exception as e:
-            log.exception("An unexpected error occurred in the main loop: %s", e)
-            time.sleep(settings.POLL_INTERVAL_SECONDS)
+        except Exception:
+            log.exception("An unexpected error occurred in the main loop")
+            time.sleep(settings.POLL_INTERVAL)
 
 
 if __name__ == "__main__":

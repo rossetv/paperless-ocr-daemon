@@ -15,9 +15,12 @@ component that abstracts away the details of the Paperless-ngx REST API.
 from typing import Generator, Iterable
 
 import requests
+import structlog
 
 from .config import Settings
 from .utils import retry
+
+log = structlog.get_logger(__name__)
 
 
 class PaperlessClient:
@@ -57,6 +60,7 @@ class PaperlessClient:
         Return documents that have the pre-OCR tag and do not yet have the post-OCR tag.
         """
         url = f"{self.settings.PAPERLESS_URL}/api/documents/?tags__id={self.settings.PRE_TAG_ID}&page_size=100"
+        log.info("Fetching documents to process", url=url)
         yield from (
             doc
             for doc in self._list_all(url)
@@ -71,6 +75,7 @@ class PaperlessClient:
         This method is a pure network operation and does not interact with the filesystem.
         """
         url = f"{self.settings.PAPERLESS_URL}/api/documents/{doc_id}/download/"
+        log.info("Downloading document", doc_id=doc_id, url=url)
         response = self._get(url)
         response.raise_for_status()
 
@@ -82,6 +87,13 @@ class PaperlessClient:
         Upload content back to Paperless and set the new tags.
         """
         url = f"{self.settings.PAPERLESS_URL}/api/documents/{doc_id}/"
+        log.info(
+            "Updating document",
+            doc_id=doc_id,
+            new_tags=new_tags,
+            content_len=len(content),
+        )
         payload = {"content": content, "tags": new_tags}
         response = self._patch(url, json=payload)
         response.raise_for_status()
+        log.info("Successfully updated document", doc_id=doc_id)

@@ -23,8 +23,8 @@ def test_settings_default_values(mocker):
     assert settings.PAPERLESS_URL == "http://paperless:8000"
     assert settings.LLM_PROVIDER == "openai"
     assert settings.PRIMARY_MODEL == "gpt-5-mini"
-    assert settings.POLL_INTERVAL_SECONDS == 15
-    assert settings.DPI == 300
+    assert settings.POLL_INTERVAL == 15
+    assert settings.OCR_DPI == 300
 
 
 def test_settings_from_environment_variables(mocker):
@@ -54,7 +54,7 @@ def test_settings_from_environment_variables(mocker):
     assert settings.OLLAMA_BASE_URL == "http://ollama:11434/v1"
     assert settings.PRIMARY_MODEL == "test-primary-model"
     assert settings.PRE_TAG_ID == 101
-    assert settings.POLL_INTERVAL_SECONDS == 30
+    assert settings.POLL_INTERVAL == 30
 
 
 def test_settings_missing_required_env_vars(mocker):
