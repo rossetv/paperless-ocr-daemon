@@ -126,10 +126,21 @@ def setup_libraries(settings: Settings) -> None:
     Image.MAX_IMAGE_PIXELS = None
 
     # Configure OpenAI SDK
-    # The httpx client is created with proxies={} to prevent it from picking up
-    # proxy settings from environment variables, which can cause issues with the
-    # OpenAI client constructor in some versions.
-    http_client = httpx.Client(proxies={})
+    # The httpx library, used by OpenAI, automatically picks up proxy settings
+    # from environment variables. In some environments, this can lead to unexpected
+    # errors if the proxy is not configured correctly. To prevent this, we
+    # temporarily unset the proxy environment variables before initializing the
+    # http_client, ensuring that no proxy is used.
+    original_proxies = (
+        os.environ.pop("HTTP_PROXY", None),
+        os.environ.pop("HTTPS_PROXY", None),
+    )
+    http_client = httpx.Client()
+    # Restore original environment variables
+    if original_proxies[0]:
+        os.environ["HTTP_PROXY"] = original_proxies[0]
+    if original_proxies[1]:
+        os.environ["HTTPS_PROXY"] = original_proxies[1]
 
     if settings.LLM_PROVIDER == "ollama":
         openai.base_url = settings.OLLAMA_BASE_URL
