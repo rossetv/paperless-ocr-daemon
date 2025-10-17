@@ -59,13 +59,19 @@ class PaperlessClient:
         """
         Return documents that have the pre-OCR tag and do not yet have the post-OCR tag.
         """
-        url = f"{self.settings.PAPERLESS_URL}/api/documents/?tags__id={self.settings.PRE_TAG_ID}&page_size=100"
-        log.info("Fetching documents to process", url=url)
-        yield from (
-            doc
-            for doc in self._list_all(url)
-            if self.settings.POST_TAG_ID not in doc.get("tags", [])
+        url = (
+            f"{self.settings.PAPERLESS_URL}/api/documents/"
+            f"?tags__id={self.settings.PRE_TAG_ID}"
+            f"&tags__id__n={self.settings.POST_TAG_ID}"
+            "&page_size=100"
         )
+        log.info(
+            "Fetching documents to process",
+            pre_tag_id=self.settings.PRE_TAG_ID,
+            post_tag_id=self.settings.POST_TAG_ID,
+            url=url,
+        )
+        yield from self._list_all(url)
 
     def download_content(self, doc_id: int) -> tuple[bytes, str]:
         """
