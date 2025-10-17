@@ -60,8 +60,15 @@ def main() -> None:
 
     while True:
         try:
-            # Convert generator to a list to count the documents
-            docs_to_process = list(paperless_client.get_documents_to_process())
+            # Fetch all documents that have the pre-tag
+            all_docs = paperless_client.get_documents_to_process()
+
+            # Filter out documents that already have the post-tag
+            docs_to_process = [
+                doc
+                for doc in all_docs
+                if settings.POST_TAG_ID not in doc.get("tags", [])
+            ]
 
             if docs_to_process:
                 log.info(f"Found {len(docs_to_process)} documents to process.")

@@ -33,16 +33,17 @@ def paperless_client(settings):
 
 def test_get_documents_to_process(paperless_client, settings, requests_mock):
     """
-    Test that the client correctly fetches documents using server-side filtering.
+    Test that the client correctly fetches all documents with the pre-OCR tag.
     """
-    # Mock the paginated API response with the new, more specific URL
+    # Mock the paginated API response
     # Page 1
     requests_mock.get(
-        f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&tags__id__n=11&page_size=100",
+        f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100",
         json={
             "next": f"{settings.PAPERLESS_URL}/api/documents/page2",
             "results": [
-                {"id": 1, "tags": [10]},  # Should be processed
+                {"id": 1, "tags": [10]},
+                {"id": 2, "tags": [10, 11]},
             ],
         },
     )
@@ -52,16 +53,15 @@ def test_get_documents_to_process(paperless_client, settings, requests_mock):
         json={
             "next": None,
             "results": [
-                {"id": 3, "tags": [10]},  # Should be processed
+                {"id": 3, "tags": [10]},
             ],
         },
     )
 
     docs = list(paperless_client.get_documents_to_process())
 
-    assert len(docs) == 2
-    assert docs[0]["id"] == 1
-    assert docs[1]["id"] == 3
+    assert len(docs) == 3
+    assert [d["id"] for d in docs] == [1, 2, 3]
 
 
 def test_download_content(paperless_client, settings, requests_mock):
@@ -108,7 +108,7 @@ def test_retry_on_network_error(paperless_client, settings, requests_mock):
     """
     Test that the client retries on a transient network error.
     """
-    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&tags__id__n=11&page_size=100"
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
     requests_mock.get(
         url,
         [
@@ -128,7 +128,7 @@ def test_retry_fails_after_max_retries(paperless_client, settings, requests_mock
     """
     Test that the client gives up after exhausting all retries.
     """
-    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&tags__id__n=11&page_size=100"
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
     requests_mock.get(url, exc=requests.exceptions.ConnectionError)
 
     with pytest.raises(requests.exceptions.ConnectionError):
