@@ -11,6 +11,7 @@ throughout the application.
 import os
 from typing import Literal
 
+import httpx
 import openai
 from PIL import Image
 
@@ -125,8 +126,15 @@ def setup_libraries(settings: Settings) -> None:
     Image.MAX_IMAGE_PIXELS = None
 
     # Configure OpenAI SDK
+    # The httpx client is created with proxies={} to prevent it from picking up
+    # proxy settings from environment variables, which can cause issues with the
+    # OpenAI client constructor in some versions.
+    http_client = httpx.Client(proxies={})
+
     if settings.LLM_PROVIDER == "ollama":
         openai.base_url = settings.OLLAMA_BASE_URL
         openai.api_key = "dummy"
     else:
         openai.api_key = settings.OPENAI_API_KEY
+
+    openai.http_client = http_client
