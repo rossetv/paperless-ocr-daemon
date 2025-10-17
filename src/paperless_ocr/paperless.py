@@ -64,7 +64,7 @@ class PaperlessClient:
             f"?tags__id={self.settings.PRE_TAG_ID}"
             "&page_size=100"
         )
-        log.info(
+        log.debug(
             "Fetching documents with pre-tag",
             pre_tag_id=self.settings.PRE_TAG_ID,
             url=url,

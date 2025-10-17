@@ -58,6 +58,7 @@ def main() -> None:
     paperless_client = PaperlessClient(settings)
     ocr_provider = OpenAIProvider(settings)
 
+    was_idle = False
     while True:
         try:
             # Fetch all documents that have the pre-tag
@@ -71,6 +72,7 @@ def main() -> None:
             ]
 
             if docs_to_process:
+                was_idle = False  # Reset idle state
                 log.info(f"Found {len(docs_to_process)} documents to process.")
                 for doc in docs_to_process:
                     try:
@@ -83,7 +85,9 @@ def main() -> None:
                             "Failed to process document", doc_id=doc.get("id")
                         )
             else:
-                log.info("No documents to process. Waiting...")
+                if not was_idle:
+                    log.info("No documents to process. Waiting...")
+                    was_idle = True
 
             time.sleep(settings.POLL_INTERVAL)
         except KeyboardInterrupt:
