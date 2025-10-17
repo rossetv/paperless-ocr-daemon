@@ -60,15 +60,24 @@ def main() -> None:
 
     while True:
         try:
-            docs_to_process = paperless_client.get_documents_to_process()
-            for doc in docs_to_process:
-                try:
-                    processor = DocumentProcessor(
-                        doc, paperless_client, ocr_provider, settings
-                    )
-                    processor.process()
-                except Exception:
-                    log.exception("Failed to process document", doc_id=doc.get("id"))
+            # Convert generator to a list to count the documents
+            docs_to_process = list(paperless_client.get_documents_to_process())
+
+            if docs_to_process:
+                log.info(f"Found {len(docs_to_process)} documents to process.")
+                for doc in docs_to_process:
+                    try:
+                        processor = DocumentProcessor(
+                            doc, paperless_client, ocr_provider, settings
+                        )
+                        processor.process()
+                    except Exception:
+                        log.exception(
+                            "Failed to process document", doc_id=doc.get("id")
+                        )
+            else:
+                log.info("No documents to process. Waiting...")
+
             time.sleep(settings.POLL_INTERVAL)
         except KeyboardInterrupt:
             log.info("Ctrl-C received, exiting.")
