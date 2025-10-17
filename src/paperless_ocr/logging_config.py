@@ -48,3 +48,6 @@ def configure_logging(settings: Settings):
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
     root_logger.setLevel(settings.LOG_LEVEL)
+
+    # Suppress noisy logs from third-party libraries
+    logging.getLogger("httpx").setLevel(logging.WARNING)
