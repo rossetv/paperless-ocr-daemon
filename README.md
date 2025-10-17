@@ -13,7 +13,7 @@ This allows for a powerful, AI-driven OCR workflow that can often produce higher
 *   **Primary/Fallback Model Support:** Automatically falls back to a secondary model if the primary model refuses to transcribe a page.
 *   **Comprehensive Testing:** Includes a full suite of unit tests to ensure code quality and prevent regressions.
 *   **Containerized Deployment:** Comes with a multi-stage `Dockerfile` that automates testing and produces a lean, secure production image.
-*   **Structured Logging:** (Coming soon) Configurable structured (JSON) logging for easy integration with modern log analysis platforms.
+*   **Structured Logging:** Configurable structured (JSON) logging for easy integration with modern log analysis platforms.
 
 ## Architecture Overview
 
@@ -43,23 +43,25 @@ The application is broken down into several key components, each with a distinct
 
 The application is configured entirely through environment variables.
 
-| Variable                | Description                                                              | Default                                | Required |
-| ----------------------- | ------------------------------------------------------------------------ | -------------------------------------- | -------- |
-| `PAPERLESS_URL`         | The full URL of your Paperless-ngx instance.                             | `http://paperless:8000`                | No       |
-| `PAPERLESS_TOKEN`       | Your Paperless-ngx API token.                                            | -                                      | **Yes**  |
-| `LLM_PROVIDER`          | The AI model provider to use. Can be `openai` or `ollama`.                 | `openai`                               | No       |
-| `OPENAI_API_KEY`        | Your OpenAI API key.                                                     | -                                      | Yes (if `LLM_PROVIDER` is `openai`) |
-| `OLLAMA_BASE_URL`       | The base URL for your Ollama API instance.                               | `http://192.168.1.110:11434/v1/`        | No (if `LLM_PROVIDER` is `ollama`) |
-| `PRIMARY_MODEL`         | The name of the primary AI model to use for transcription.               | `gpt-5-mini` (OpenAI) / `gemma3:27b` (Ollama) | No       |
-| `FALLBACK_MODEL`        | The model to use if the primary one fails or refuses.                    | `o4-mini` (OpenAI) / `gemma3:12b` (Ollama) | No       |
-| `PRE_TAG_ID`            | The ID of the Paperless-ngx tag that marks documents for OCR.            | `443`                                  | No       |
-| `POST_TAG_ID`           | The ID of the tag to apply after OCR is complete.                        | `444`                                  | No       |
-| `POLL_INTERVAL`         | The number of seconds to wait between polling for new documents.         | `15`                                   | No       |
-| `MAX_RETRIES`           | The maximum number of times to retry a failed network request.           | `20`                                   | No       |
-| `REQUEST_TIMEOUT`       | The timeout in seconds for requests to the AI model provider.            | `180`                                  | No       |
-| `OCR_DPI`               | The resolution (in DPI) to use when rasterizing PDF pages.               | `300`                                  | No       |
-| `OCR_MAX_SIDE`          | The maximum size (in pixels) of the longest side of an image sent to the model. | `1600`                                 | No       |
-| `WORKERS`               | The number of worker threads to use for parallel page processing.        | `8`                                    | No       |
+| Variable | Description | Default | Required |
+| :--- | :--- | :--- | :--- |
+| `PAPERLESS_URL` | The full URL of your Paperless-ngx instance. | `http://paperless:8000` | No |
+| `PAPERLESS_TOKEN` | Your Paperless-ngx API token. | - | **Yes** |
+| `LLM_PROVIDER` | The AI model provider to use. Can be `openai` or `ollama`. | `openai` | No |
+| `OPENAI_API_KEY` | Your OpenAI API key. | - | Yes (if `LLM_PROVIDER` is `openai`) |
+| `OLLAMA_BASE_URL` | The base URL for your Ollama API instance. | `http://localhost:11434/v1/` | Yes (if `LLM_PROVIDER` is `ollama`) |
+| `PRIMARY_MODEL` | The name of the primary AI model to use for transcription. | `gpt-5-mini` (OpenAI) / `gemma3:27b` (Ollama) | No |
+| `FALLBACK_MODEL` | The model to use if the primary one fails or refuses. | `o4-mini` (OpenAI) / `gemma3:12b` (Ollama) | No |
+| `PRE_TAG_ID` | The ID of the Paperless-ngx tag that marks documents for OCR. | `443` | No |
+| `POST_TAG_ID` | The ID of the tag to apply after OCR is complete. | `444` | No |
+| `POLL_INTERVAL` | The number of seconds to wait between polling for new documents. | `15` | No |
+| `MAX_RETRIES` | The maximum number of times to retry a failed network request. | `20` | No |
+| `REQUEST_TIMEOUT` | The timeout in seconds for requests to the AI model provider. | `180` | No |
+| `OCR_DPI` | The resolution (in DPI) to use when rasterizing PDF pages. | `300` | No |
+| `OCR_MAX_SIDE` | The maximum size (in pixels) of the longest side of an image sent to the model. | `1600` | No |
+| `WORKERS` | The number of worker threads to use for parallel page processing. | `8` | No |
+| `LOG_LEVEL` | The minimum log level to output. | `INFO` | No |
+| `LOG_FORMAT` | The log output format. Can be `console` or `json`. | `console` | No |
 
 ## Deployment
 
@@ -100,10 +102,9 @@ To set up a local development environment:
     ```
 
 3.  **Install Dependencies:**
-    Install the project dependencies along with the development and testing libraries.
+    Install the project in editable mode along with the development and testing libraries.
     ```bash
-    pip install -e .
-    pip install -r requirements-dev.txt
+    pip install -e . -r requirements-dev.txt
     ```
 
 4.  **Set Environment Variables:**
