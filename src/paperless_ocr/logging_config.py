@@ -19,25 +19,27 @@ def configure_logging(settings: Settings):
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        # This must be the last processor in the chain
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
     ]
 
+    # Configure structlog
+    structlog.configure(
+        processors=shared_processors,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
+
+    # Configure the chosen formatter
     if settings.LOG_FORMAT == "json":
-        processors = shared_processors + [
-            structlog.processors.dict_tracebacks,
-            structlog.processors.JSONRenderer(),
-        ]
         formatter = structlog.stdlib.ProcessorFormatter(
             # These run after the processors defined above
-            foreign_pre_chain=shared_processors,
-            processors=processors,
+            processor=structlog.processors.JSONRenderer(),
         )
     else:  # console
-        processors = shared_processors + [
-            structlog.dev.ConsoleRenderer(colors=True),
-        ]
         formatter = structlog.stdlib.ProcessorFormatter(
-            foreign_pre_chain=shared_processors,
-            processors=processors,
+            processor=structlog.dev.ConsoleRenderer(colors=True),
         )
 
     # Configure the root logger
@@ -46,11 +48,3 @@ def configure_logging(settings: Settings):
     handler.setFormatter(formatter)
     root_logger.addHandler(handler)
     root_logger.setLevel(settings.LOG_LEVEL)
-
-    # Configure structlog
-    structlog.configure(
-        processors=processors,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )
