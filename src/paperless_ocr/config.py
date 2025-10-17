@@ -75,9 +75,7 @@ class Settings:
 
         # --- Model Selection ---
         if self.LLM_PROVIDER == "ollama":
-            self.OLLAMA_BASE_URL = os.getenv(
-                "OLLAMA_BASE_URL", "http://192.168.1.110:11434/v1/"
-            )
+            self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
             self.OPENAI_API_KEY = None  # Not used for Ollama
             self.PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gemma3:27b")
             self.FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "gemma3:12b")
