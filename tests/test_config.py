@@ -97,7 +97,7 @@ def test_ollama_configuration(mocker):
 
     assert settings.LLM_PROVIDER == "ollama"
     assert settings.PRIMARY_MODEL == "gemma3:27b"
-    assert openai.base_url == "http://192.168.1.110:11434/v1/"
+    assert openai.base_url == "http://localhost:11434/v1/"
     assert openai.api_key == "dummy"
 
 
