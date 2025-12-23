@@ -44,6 +44,7 @@ logos as [Logo: <transcribed text>] (or [Logo] if no text); hand-written signatu
 [Stamp: <transcribed text>] (or [Stamp]); barcodes as [Barcode]; QR codes as [QR Code];
 checked boxes as [x] and unchecked boxes as [ ]. Watermarks should be marked
 [Watermark: <transcribed text>] or [Watermark] if purely graphical.
+Do not ask me any questions, just transcribe the document. You are part of a document pipeline which won't have any human interaction.
 """
 
 
