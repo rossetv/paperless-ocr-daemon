@@ -60,6 +60,7 @@ The application is configured entirely through environment variables.
 | `OCR_DPI` | The resolution (in DPI) to use when rasterizing PDF pages. | `300` | No |
 | `OCR_MAX_SIDE` | The maximum size (in pixels) of the longest side of an image sent to the model. | `1600` | No |
 | `WORKERS` | The number of worker threads to use for parallel page processing. | `8` | No |
+| `DOCUMENT_WORKERS` | The number of worker threads to use for parallel document processing. | `4` | No |
 | `LOG_LEVEL` | The minimum log level to output. | `INFO` | No |
 | `LOG_FORMAT` | The log output format. Can be `console` or `json`. | `console` | No |
 

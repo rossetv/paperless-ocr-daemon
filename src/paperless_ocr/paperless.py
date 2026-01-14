@@ -101,3 +101,7 @@ class PaperlessClient:
         response = self._patch(url, json=payload)
         response.raise_for_status()
         log.info("Successfully updated document", doc_id=doc_id)
+
+    def close(self) -> None:
+        """Close the underlying HTTP session."""
+        self._session.close()
