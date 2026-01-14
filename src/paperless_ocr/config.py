@@ -49,7 +49,8 @@ class Settings:
     # --- Image Processing Configuration ---
     OCR_DPI: int
     OCR_MAX_SIDE: int
-    WORKERS: int
+    PAGE_WORKERS: int
+    DOCUMENT_WORKERS: int
 
     # --- Logging ---
     LOG_LEVEL: str
@@ -97,7 +98,8 @@ class Settings:
         # --- Image Processing Configuration ---
         self.OCR_DPI = int(os.getenv("OCR_DPI", "300"))
         self.OCR_MAX_SIDE = int(os.getenv("OCR_MAX_SIDE", "1600"))
-        self.WORKERS = max(1, int(os.getenv("WORKERS", "8")))
+        self.PAGE_WORKERS = max(1, int(os.getenv("PAGE_WORKERS", "8")))
+        self.DOCUMENT_WORKERS = max(1, int(os.getenv("DOCUMENT_WORKERS", "4")))
 
         # --- Logging ---
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()

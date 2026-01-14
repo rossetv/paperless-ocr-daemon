@@ -101,7 +101,7 @@ class DocumentProcessor:
         self, images: list[Image.Image]
     ) -> list[tuple[str, str]]:
         """Run OCR on each page concurrently and preserve the original order."""
-        with ThreadPoolExecutor(max_workers=self.settings.WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=self.settings.PAGE_WORKERS) as executor:
             future_to_index = {
                 executor.submit(self.ocr_provider.transcribe_image, img): i
                 for i, img in enumerate(images)

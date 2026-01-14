@@ -17,6 +17,7 @@ allowing for flexible deployment in various environments.
 """
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import structlog
 
@@ -51,12 +52,12 @@ def main() -> None:
         poll_interval=settings.POLL_INTERVAL,
         ocr_dpi=settings.OCR_DPI,
         ocr_max_side=settings.OCR_MAX_SIDE,
-        workers=settings.WORKERS,
+        page_workers=settings.PAGE_WORKERS,
+        document_workers=settings.DOCUMENT_WORKERS,
         llm_provider=settings.LLM_PROVIDER,
     )
 
     paperless_client = PaperlessClient(settings)
-    ocr_provider = OpenAIProvider(settings)
 
     was_idle = False
     while True:
@@ -73,17 +74,41 @@ def main() -> None:
 
             if docs_to_process:
                 was_idle = False  # Reset idle state
-                log.info(f"Found {len(docs_to_process)} documents to process.")
-                for doc in docs_to_process:
+                log.info(
+                    "Found documents to process",
+                    doc_count=len(docs_to_process),
+                    document_workers=settings.DOCUMENT_WORKERS,
+                )
+
+                def process_document(doc: dict) -> None:
+                    paperless = PaperlessClient(settings)
+                    ocr_provider = OpenAIProvider(settings)
                     try:
                         processor = DocumentProcessor(
-                            doc, paperless_client, ocr_provider, settings
+                            doc,
+                            paperless,
+                            ocr_provider,
+                            settings,
                         )
                         processor.process()
-                    except Exception:
-                        log.exception(
-                            "Failed to process document", doc_id=doc.get("id")
-                        )
+                    finally:
+                        paperless.close()
+
+                with ThreadPoolExecutor(
+                    max_workers=settings.DOCUMENT_WORKERS
+                ) as executor:
+                    future_to_doc = {
+                        executor.submit(process_document, doc): doc
+                        for doc in docs_to_process
+                    }
+                    for future in as_completed(future_to_doc):
+                        doc = future_to_doc[future]
+                        try:
+                            future.result()
+                        except Exception:
+                            log.exception(
+                                "Failed to process document", doc_id=doc.get("id")
+                            )
             else:
                 if not was_idle:
                     log.info("No documents to process. Waiting...")
