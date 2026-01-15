@@ -1,6 +1,6 @@
 # Stage 1: Builder and Tester
 # This stage installs all dependencies (including dev), runs tests, and builds the application.
-FROM python:3.11.9-slim as builder
+FROM python:3.11-slim as builder
 
 # Install system dependencies required for building Python packages and running tests
 RUN apt-get update && apt-get install -y \
@@ -43,7 +43,7 @@ RUN pytest
 
 # Stage 2: Final Production Image
 # This stage creates a lean, secure image with only runtime dependencies.
-FROM python:3.11.9-slim
+FROM python:3.11-slim
 
 # Create a non-root user and group for security
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
