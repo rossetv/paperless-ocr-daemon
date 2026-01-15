@@ -116,3 +116,64 @@ def test_invalid_llm_provider(mocker):
 
     with pytest.raises(ValueError, match="LLM_PROVIDER must be 'openai' or 'ollama'"):
         Settings()
+
+
+def test_invalid_log_format(mocker):
+    """
+    Test that an invalid LOG_FORMAT value raises a ValueError.
+    """
+    mocker.patch.dict(
+        os.environ,
+        {
+            "PAPERLESS_TOKEN": "test_token",
+            "OPENAI_API_KEY": "test_api_key",
+            "LOG_FORMAT": "xml",
+        },
+        clear=True,
+    )
+
+    with pytest.raises(ValueError, match="LOG_FORMAT must be 'json' or 'console'"):
+        Settings()
+
+
+def test_minimum_worker_counts(mocker):
+    """
+    Test that worker counts are clamped to a minimum of 1.
+    """
+    mocker.patch.dict(
+        os.environ,
+        {
+            "PAPERLESS_TOKEN": "test_token",
+            "OPENAI_API_KEY": "test_api_key",
+            "PAGE_WORKERS": "0",
+            "DOCUMENT_WORKERS": "-5",
+        },
+        clear=True,
+    )
+
+    settings = Settings()
+
+    assert settings.PAGE_WORKERS == 1
+    assert settings.DOCUMENT_WORKERS == 1
+
+
+def test_setup_libraries_restores_proxies(mocker):
+    """
+    Test that proxy environment variables are restored after setup.
+    """
+    mocker.patch.dict(
+        os.environ,
+        {
+            "PAPERLESS_TOKEN": "test_token",
+            "OPENAI_API_KEY": "test_api_key",
+            "HTTP_PROXY": "http://proxy.local",
+            "HTTPS_PROXY": "https://proxy.local",
+        },
+        clear=True,
+    )
+
+    settings = Settings()
+    setup_libraries(settings)
+
+    assert os.environ.get("HTTP_PROXY") == "http://proxy.local"
+    assert os.environ.get("HTTPS_PROXY") == "https://proxy.local"

@@ -82,6 +82,24 @@ def test_download_content(paperless_client, settings, requests_mock):
     assert content == file_content
 
 
+def test_download_content_defaults_content_type(paperless_client, settings, requests_mock):
+    """
+    Test that the content type defaults when not provided by the server.
+    """
+    doc_id = 2
+    file_content = b"binary data"
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/download/",
+        content=file_content,
+        headers={},
+    )
+
+    content, content_type = paperless_client.download_content(doc_id)
+
+    assert content_type == "application/pdf"
+    assert content == file_content
+
+
 def test_update_document(paperless_client, settings, requests_mock):
     """
     Test that a document is correctly updated with new content and tags.

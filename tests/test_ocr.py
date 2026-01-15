@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 from paperless_ocr.config import Settings
-from paperless_ocr.ocr import OpenAIProvider
+from paperless_ocr.ocr import OpenAIProvider, _is_refusal
 
 
 @pytest.fixture
@@ -126,3 +126,22 @@ def test_transcribe_blank_image(ocr_provider, mock_create_completion):
     assert text == ""
     assert model == ""
     mock_create_completion.assert_not_called()
+
+
+def test_is_refusal_detection():
+    assert _is_refusal("I can't assist with that.")
+    assert _is_refusal("I CAN'T ASSIST")
+    assert not _is_refusal("This is a normal response.")
+
+
+def test_transcribe_image_resizes_image(ocr_provider, mock_create_completion, mocker):
+    """Test that images are resized before sending to the API."""
+    image = create_test_image()
+    thumbnail_spy = mocker.spy(image, "thumbnail")
+    mock_create_completion.return_value = create_mock_response(mocker, "ok")
+
+    ocr_provider.transcribe_image(image)
+
+    thumbnail_spy.assert_called_once_with(
+        (ocr_provider.settings.OCR_MAX_SIDE, ocr_provider.settings.OCR_MAX_SIDE)
+    )
