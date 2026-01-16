@@ -34,23 +34,36 @@ class PaperlessClient:
             {"Authorization": f"Token {self.settings.PAPERLESS_TOKEN}"}
         )
 
+    def _raise_for_status_if_server_error(self, response: requests.Response) -> None:
+        """
+        Raise for 5xx responses to enable retries; let callers handle 4xx.
+        """
+        if response.status_code >= 500:
+            response.raise_for_status()
+
     @retry(retryable_exceptions=(requests.exceptions.RequestException,))
     def _get(self, *args, **kwargs) -> requests.Response:
         """A retriable version of session.get."""
         kwargs.setdefault("timeout", self.settings.REQUEST_TIMEOUT)
-        return self._session.get(*args, **kwargs)
+        response = self._session.get(*args, **kwargs)
+        self._raise_for_status_if_server_error(response)
+        return response
 
     @retry(retryable_exceptions=(requests.exceptions.RequestException,))
     def _patch(self, *args, **kwargs) -> requests.Response:
         """A retriable version of session.patch."""
         kwargs.setdefault("timeout", self.settings.REQUEST_TIMEOUT)
-        return self._session.patch(*args, **kwargs)
+        response = self._session.patch(*args, **kwargs)
+        self._raise_for_status_if_server_error(response)
+        return response
 
     @retry(retryable_exceptions=(requests.exceptions.RequestException,))
     def _post(self, *args, **kwargs) -> requests.Response:
         """A retriable version of session.post."""
         kwargs.setdefault("timeout", self.settings.REQUEST_TIMEOUT)
-        return self._session.post(*args, **kwargs)
+        response = self._session.post(*args, **kwargs)
+        self._raise_for_status_if_server_error(response)
+        return response
 
     def _list_all(self, url: str) -> Generator[dict, None, None]:
         """

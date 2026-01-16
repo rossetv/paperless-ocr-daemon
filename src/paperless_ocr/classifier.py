@@ -20,6 +20,8 @@ from .llm import OpenAIChatMixin
 
 log = structlog.get_logger(__name__)
 
+DEFAULT_CLASSIFY_TEMPERATURE = 0.2
+
 CLASSIFICATION_PROMPT = """
 You are an advanced document-analysis agent.
 
@@ -206,6 +208,15 @@ class ClassificationProvider(OpenAIChatMixin):
     def __init__(self, settings: Settings):
         self.settings = settings
 
+    def _supports_temperature(self, model: str) -> bool:
+        """Return True if the model is known to support a temperature parameter."""
+        return not model.startswith("gpt-5")
+
+    def _is_temperature_error(self, error: openai.BadRequestError) -> bool:
+        """Return True if the error indicates an unsupported temperature parameter."""
+        message = str(error).lower()
+        return "temperature" in message and "unsupported" in message
+
     def classify_text(
         self,
         text: str,
@@ -239,14 +250,44 @@ class ClassificationProvider(OpenAIChatMixin):
         models_to_try = [self.settings.CLASSIFY_MODEL, self.settings.CLASSIFY_FALLBACK_MODEL]
 
         for model in models_to_try:
+            temperature = (
+                DEFAULT_CLASSIFY_TEMPERATURE if self._supports_temperature(model) else None
+            )
             params = {
                 "model": model,
                 "messages": messages,
-                "temperature": 0.2,
                 "timeout": self.settings.REQUEST_TIMEOUT,
             }
+            if temperature is not None:
+                params["temperature"] = temperature
             try:
                 response = self._create_completion(**params)
+            except openai.BadRequestError as e:
+                if temperature is None or not self._is_temperature_error(e):
+                    log.warning("Classification request rejected", model=model, error=e)
+                    continue
+                log.warning(
+                    "Model does not support temperature; retrying with default settings",
+                    model=model,
+                )
+                params.pop("temperature", None)
+                try:
+                    response = self._create_completion(**params)
+                except openai.BadRequestError as retry_error:
+                    log.warning(
+                        "Classification request rejected",
+                        model=model,
+                        error=retry_error,
+                    )
+                    continue
+                except openai.APIError as retry_error:
+                    log.warning("Classification model failed", model=model, error=retry_error)
+                    continue
+            except openai.APIError as e:
+                log.warning("Classification model failed", model=model, error=e)
+                continue
+
+            try:
                 content = response.choices[0].message.content or ""
                 result = parse_classification_response(content)
                 return result, model
@@ -256,9 +297,6 @@ class ClassificationProvider(OpenAIChatMixin):
                     model=model,
                     error=str(e),
                 )
-                continue
-            except openai.APIError as e:
-                log.warning("Classification model failed", model=model, error=e)
                 continue
 
         log.error("All classification models failed")

@@ -229,3 +229,35 @@ def test_retry_fails_after_max_retries(paperless_client, settings, requests_mock
         list(paperless_client.get_documents_to_process())
 
     assert requests_mock.call_count == settings.MAX_RETRIES
+
+
+def test_retry_on_server_error(paperless_client, settings, requests_mock):
+    """
+    Test that 5xx responses trigger retries.
+    """
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
+    requests_mock.get(
+        url,
+        [
+            {"status_code": 502, "json": {"detail": "Bad Gateway"}},
+            {"json": {"next": None, "results": [{"id": 1, "tags": [10]}]}},
+        ],
+    )
+
+    docs = list(paperless_client.get_documents_to_process())
+
+    assert len(docs) == 1
+    assert requests_mock.call_count == 2
+
+
+def test_no_retry_on_client_error(paperless_client, settings, requests_mock):
+    """
+    Test that 4xx responses do not trigger retries.
+    """
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
+    requests_mock.get(url, status_code=404, json={"detail": "Not found"})
+
+    with pytest.raises(requests.exceptions.HTTPError):
+        list(paperless_client.get_documents_to_process())
+
+    assert requests_mock.call_count == 1

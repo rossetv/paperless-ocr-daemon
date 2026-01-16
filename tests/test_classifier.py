@@ -1,5 +1,7 @@
 import os
 
+import httpx
+import openai
 import pytest
 
 from paperless_ocr.classifier import ClassificationProvider, parse_classification_response
@@ -12,6 +14,11 @@ def create_mock_response(mocker, content):
     mock_response = mocker.MagicMock()
     mock_response.choices = [mock_choice]
     return mock_response
+
+
+def create_bad_request_error(message: str) -> openai.BadRequestError:
+    response = httpx.Response(400, request=httpx.Request("POST", "https://example.com"))
+    return openai.BadRequestError(message, response=response, body=None)
 
 
 @pytest.fixture
@@ -83,3 +90,51 @@ def test_classify_text_fallback_on_invalid_json(settings, mocker):
 
     assert result is not None
     assert model == "classify-fallback"
+
+
+def test_classify_text_omits_temperature_for_gpt5(settings, mocker):
+    settings.CLASSIFY_MODEL = "gpt-5-mini"
+    settings.CLASSIFY_FALLBACK_MODEL = "classify-fallback"
+    provider = ClassificationProvider(settings)
+    mock_create = mocker.patch(
+        "paperless_ocr.classifier.ClassificationProvider._create_completion"
+    )
+    mock_create.return_value = create_mock_response(
+        mocker,
+        '{"title":"Ok","correspondent":"","tags":[],"document_date":"2025-05-01",'
+        '"document_type":"","language":"en","person":""}',
+    )
+
+    result, model = provider.classify_text("text", ["A"], ["B"], ["C"])
+
+    assert result is not None
+    assert model == "gpt-5-mini"
+    _, kwargs = mock_create.call_args
+    assert "temperature" not in kwargs
+
+
+def test_classify_text_retries_without_temperature_on_error(settings, mocker):
+    provider = ClassificationProvider(settings)
+    mock_create = mocker.patch(
+        "paperless_ocr.classifier.ClassificationProvider._create_completion"
+    )
+    temp_error = create_bad_request_error(
+        "Unsupported value: 'temperature' does not support 0.2 with this model."
+    )
+    mock_create.side_effect = [
+        temp_error,
+        create_mock_response(
+            mocker,
+            '{"title":"Ok","correspondent":"","tags":[],"document_date":"2025-05-01",'
+            '"document_type":"","language":"en","person":""}',
+        ),
+    ]
+
+    result, model = provider.classify_text("text", ["A"], ["B"], ["C"])
+
+    assert result is not None
+    assert model == "classify-primary"
+    first_kwargs = mock_create.call_args_list[0].kwargs
+    second_kwargs = mock_create.call_args_list[1].kwargs
+    assert "temperature" in first_kwargs
+    assert "temperature" not in second_kwargs
