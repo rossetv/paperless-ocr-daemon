@@ -144,7 +144,7 @@ class Settings:
         self.LOG_FORMAT = log_format
 
         # --- Classification Configuration ---
-        self.CLASSIFY_MODEL = os.getenv("CLASSIFY_MODEL", self.PRIMARY_MODEL)
+        self.CLASSIFY_MODEL = os.getenv("CLASSIFY_MODEL", "gpt-5.2")
         self.CLASSIFY_FALLBACK_MODEL = os.getenv(
             "CLASSIFY_FALLBACK_MODEL", self.FALLBACK_MODEL
         )
