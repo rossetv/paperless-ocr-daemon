@@ -37,12 +37,20 @@ class PaperlessClient:
     @retry(retryable_exceptions=(requests.exceptions.RequestException,))
     def _get(self, *args, **kwargs) -> requests.Response:
         """A retriable version of session.get."""
+        kwargs.setdefault("timeout", self.settings.REQUEST_TIMEOUT)
         return self._session.get(*args, **kwargs)
 
     @retry(retryable_exceptions=(requests.exceptions.RequestException,))
     def _patch(self, *args, **kwargs) -> requests.Response:
         """A retriable version of session.patch."""
+        kwargs.setdefault("timeout", self.settings.REQUEST_TIMEOUT)
         return self._session.patch(*args, **kwargs)
+
+    @retry(retryable_exceptions=(requests.exceptions.RequestException,))
+    def _post(self, *args, **kwargs) -> requests.Response:
+        """A retriable version of session.post."""
+        kwargs.setdefault("timeout", self.settings.REQUEST_TIMEOUT)
+        return self._session.post(*args, **kwargs)
 
     def _list_all(self, url: str) -> Generator[dict, None, None]:
         """
@@ -59,17 +67,29 @@ class PaperlessClient:
         """
         Return documents that have the pre-OCR tag.
         """
+        yield from self.get_documents_by_tag(self.settings.PRE_TAG_ID)
+
+    def get_documents_by_tag(self, tag_id: int) -> Iterable[dict]:
+        """
+        Return documents that have the provided tag.
+        """
         url = (
             f"{self.settings.PAPERLESS_URL}/api/documents/"
-            f"?tags__id={self.settings.PRE_TAG_ID}"
+            f"?tags__id={tag_id}"
             "&page_size=100"
         )
-        log.debug(
-            "Fetching documents with pre-tag",
-            pre_tag_id=self.settings.PRE_TAG_ID,
-            url=url,
-        )
+        log.debug("Fetching documents with tag", tag_id=tag_id, url=url)
         yield from self._list_all(url)
+
+    def get_document(self, doc_id: int) -> dict:
+        """
+        Fetch a single document by ID.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/documents/{doc_id}/"
+        log.debug("Fetching document", doc_id=doc_id, url=url)
+        response = self._get(url)
+        response.raise_for_status()
+        return response.json()
 
     def download_content(self, doc_id: int) -> tuple[bytes, str]:
         """
@@ -101,6 +121,104 @@ class PaperlessClient:
         response = self._patch(url, json=payload)
         response.raise_for_status()
         log.info("Successfully updated document", doc_id=doc_id)
+
+    def update_document_metadata(
+        self,
+        doc_id: int,
+        *,
+        title: str | None = None,
+        correspondent_id: int | None = None,
+        document_type_id: int | None = None,
+        document_date: str | None = None,
+        tags: list[int] | None = None,
+        language: str | None = None,
+        custom_fields: list[dict] | None = None,
+    ) -> None:
+        """
+        Update document metadata fields in Paperless.
+        """
+        payload: dict = {}
+        if title is not None:
+            payload["title"] = title
+        if correspondent_id is not None:
+            payload["correspondent"] = correspondent_id
+        if document_type_id is not None:
+            payload["document_type"] = document_type_id
+        if document_date is not None:
+            payload["created"] = document_date
+        if tags is not None:
+            payload["tags"] = tags
+        if language is not None:
+            payload["language"] = language
+        if custom_fields is not None:
+            payload["custom_fields"] = custom_fields
+
+        if not payload:
+            log.info("No metadata updates to apply", doc_id=doc_id)
+            return
+
+        url = f"{self.settings.PAPERLESS_URL}/api/documents/{doc_id}/"
+        log.info("Updating document metadata", doc_id=doc_id, payload_keys=list(payload))
+        response = self._patch(url, json=payload)
+        response.raise_for_status()
+        log.info("Successfully updated document metadata", doc_id=doc_id)
+
+    def list_correspondents(self) -> list[dict]:
+        """
+        List all correspondents in Paperless.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/correspondents/?page_size=100"
+        log.debug("Listing correspondents", url=url)
+        return list(self._list_all(url))
+
+    def list_document_types(self) -> list[dict]:
+        """
+        List all document types in Paperless.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/document_types/?page_size=100"
+        log.debug("Listing document types", url=url)
+        return list(self._list_all(url))
+
+    def list_tags(self) -> list[dict]:
+        """
+        List all tags in Paperless.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/tags/?page_size=100"
+        log.debug("Listing tags", url=url)
+        return list(self._list_all(url))
+
+    def create_correspondent(self, name: str) -> dict:
+        """
+        Create a new correspondent and return the created object.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/correspondents/"
+        payload = {"name": name}
+        log.info("Creating correspondent", name=name)
+        response = self._post(url, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def create_document_type(self, name: str) -> dict:
+        """
+        Create a new document type and return the created object.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/document_types/"
+        payload = {"name": name}
+        log.info("Creating document type", name=name)
+        response = self._post(url, json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def create_tag(self, name: str) -> dict:
+        """
+        Create a new tag and return the created object.
+        """
+        url = f"{self.settings.PAPERLESS_URL}/api/tags/"
+        payload = {"name": name}
+        log.info("Creating tag", name=name)
+        response = self._post(url, json=payload)
+        response.raise_for_status()
+        return response.json()
 
     def close(self) -> None:
         """Close the underlying HTTP session."""

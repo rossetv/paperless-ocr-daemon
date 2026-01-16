@@ -24,7 +24,14 @@ def test_settings_default_values(mocker):
     assert settings.LLM_PROVIDER == "openai"
     assert settings.PRIMARY_MODEL == "gpt-5-mini"
     assert settings.POLL_INTERVAL == 15
+    assert settings.MAX_RETRY_BACKOFF_SECONDS == 30
     assert settings.OCR_DPI == 300
+    assert settings.CLASSIFY_PRE_TAG_ID == settings.POST_TAG_ID
+    assert settings.CLASSIFY_POST_TAG_ID is None
+    assert settings.CLASSIFY_TAG_LIMIT == 8
+    assert settings.CLASSIFY_MAX_PAGES == 5
+    assert settings.CLASSIFY_HEADERLESS_CHAR_LIMIT == 15000
+    assert settings.ERROR_TAG_ID == 552
 
 
 def test_settings_from_environment_variables(mocker):
@@ -42,6 +49,13 @@ def test_settings_from_environment_variables(mocker):
             "PRIMARY_MODEL": "test-primary-model",
             "PRE_TAG_ID": "101",
             "POLL_INTERVAL": "30",
+            "MAX_RETRY_BACKOFF_SECONDS": "12",
+            "CLASSIFY_PRE_TAG_ID": "555",
+            "CLASSIFY_POST_TAG_ID": "556",
+            "CLASSIFY_DEFAULT_COUNTRY_TAG": "Ireland",
+            "CLASSIFY_MAX_PAGES": "2",
+            "ERROR_TAG_ID": "999",
+            "CLASSIFY_HEADERLESS_CHAR_LIMIT": "1200",
         },
         clear=True,
     )
@@ -55,6 +69,13 @@ def test_settings_from_environment_variables(mocker):
     assert settings.PRIMARY_MODEL == "test-primary-model"
     assert settings.PRE_TAG_ID == 101
     assert settings.POLL_INTERVAL == 30
+    assert settings.MAX_RETRY_BACKOFF_SECONDS == 12
+    assert settings.CLASSIFY_PRE_TAG_ID == 555
+    assert settings.CLASSIFY_POST_TAG_ID == 556
+    assert settings.CLASSIFY_DEFAULT_COUNTRY_TAG == "Ireland"
+    assert settings.CLASSIFY_MAX_PAGES == 2
+    assert settings.CLASSIFY_HEADERLESS_CHAR_LIMIT == 1200
+    assert settings.ERROR_TAG_ID == 999
 
 
 def test_settings_missing_required_env_vars(mocker):
@@ -133,6 +154,42 @@ def test_invalid_log_format(mocker):
     )
 
     with pytest.raises(ValueError, match="LOG_FORMAT must be 'json' or 'console'"):
+        Settings()
+
+
+def test_invalid_max_retries(mocker):
+    """
+    Test that MAX_RETRIES must be at least 1.
+    """
+    mocker.patch.dict(
+        os.environ,
+        {
+            "PAPERLESS_TOKEN": "test_token",
+            "OPENAI_API_KEY": "test_api_key",
+            "MAX_RETRIES": "0",
+        },
+        clear=True,
+    )
+
+    with pytest.raises(ValueError, match="MAX_RETRIES must be >= 1"):
+        Settings()
+
+
+def test_invalid_max_retry_backoff_seconds(mocker):
+    """
+    Test that MAX_RETRY_BACKOFF_SECONDS must be at least 1.
+    """
+    mocker.patch.dict(
+        os.environ,
+        {
+            "PAPERLESS_TOKEN": "test_token",
+            "OPENAI_API_KEY": "test_api_key",
+            "MAX_RETRY_BACKOFF_SECONDS": "0",
+        },
+        clear=True,
+    )
+
+    with pytest.raises(ValueError, match="MAX_RETRY_BACKOFF_SECONDS must be >= 1"):
         Settings()
 
 

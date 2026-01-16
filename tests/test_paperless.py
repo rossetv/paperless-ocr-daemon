@@ -122,6 +122,82 @@ def test_update_document(paperless_client, settings, requests_mock):
     }
 
 
+def test_get_document(paperless_client, settings, requests_mock):
+    """
+    Test that a single document can be fetched.
+    """
+    doc_id = 42
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/",
+        json={"id": doc_id, "content": "text"},
+    )
+
+    doc = paperless_client.get_document(doc_id)
+
+    assert doc["id"] == doc_id
+
+
+def test_list_tags(paperless_client, settings, requests_mock):
+    """
+    Test listing tags from Paperless.
+    """
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/tags/?page_size=100",
+        json={"next": None, "results": [{"id": 1, "name": "Bills"}]},
+    )
+
+    tags = paperless_client.list_tags()
+
+    assert tags == [{"id": 1, "name": "Bills"}]
+
+
+def test_create_tag(paperless_client, settings, requests_mock):
+    """
+    Test creating a tag in Paperless.
+    """
+    requests_mock.post(
+        f"{settings.PAPERLESS_URL}/api/tags/",
+        json={"id": 9, "name": "NewTag"},
+        status_code=201,
+    )
+
+    created = paperless_client.create_tag("NewTag")
+
+    assert created["id"] == 9
+    assert created["name"] == "NewTag"
+
+
+def test_update_document_metadata(paperless_client, settings, requests_mock):
+    """
+    Test metadata updates with a PATCH payload.
+    """
+    doc_id = 3
+    mock_patch = requests_mock.patch(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/", status_code=200
+    )
+
+    paperless_client.update_document_metadata(
+        doc_id,
+        title="Title",
+        correspondent_id=1,
+        document_type_id=2,
+        document_date="2025-05-01",
+        tags=[1, 2],
+        language="en",
+        custom_fields=[{"field": 7, "value": "Person"}],
+    )
+
+    assert mock_patch.called
+    assert mock_patch.last_request.json() == {
+        "title": "Title",
+        "correspondent": 1,
+        "document_type": 2,
+        "created": "2025-05-01",
+        "tags": [1, 2],
+        "language": "en",
+        "custom_fields": [{"field": 7, "value": "Person"}],
+    }
+
 def test_retry_on_network_error(paperless_client, settings, requests_mock):
     """
     Test that the client retries on a transient network error.

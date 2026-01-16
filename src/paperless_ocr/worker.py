@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import IO, List
 
 import structlog
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageSequence, UnidentifiedImageError
 from pdf2image import convert_from_path
 
 from .config import Settings
@@ -93,6 +93,10 @@ class DocumentProcessor:
         try:
             img = Image.open(path)
             img.load()
+            if getattr(img, "n_frames", 1) > 1:
+                frames = [frame.copy() for frame in ImageSequence.Iterator(img)]
+                img.close()
+                return frames
             return [img]
         except UnidentifiedImageError as e:
             raise RuntimeError(f"Unable to open image: {e}") from e
@@ -143,6 +147,21 @@ class DocumentProcessor:
         Update the document in Paperless with the new content and tags.
         """
         current_tags = set(self.doc.get("tags", []))
+        try:
+            latest = self.paperless_client.get_document(self.doc_id)
+            latest_tags = latest.get("tags", [])
+            if isinstance(latest_tags, list):
+                current_tags = set(latest_tags)
+            else:
+                log.warning(
+                    "Document tags were not a list; using cached tags",
+                    doc_id=self.doc_id,
+                )
+        except Exception:
+            log.exception(
+                "Failed to refresh document before updating tags; using cached tags",
+                doc_id=self.doc_id,
+            )
         current_tags.discard(self.settings.PRE_TAG_ID)
         current_tags.add(self.settings.POST_TAG_ID)
 

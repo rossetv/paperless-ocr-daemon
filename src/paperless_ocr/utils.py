@@ -33,12 +33,18 @@ def retry(
 
     Args:
         retryable_exceptions: A tuple of exception types that should trigger a retry.
+
+    Notes:
+        The wrapped method must be on an object with a ``settings`` attribute
+        that provides ``MAX_RETRIES`` and ``MAX_RETRY_BACKOFF_SECONDS``.
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(self, *args, **kwargs) -> T:
             settings: Settings = self.settings
+            if settings.MAX_RETRIES < 1:
+                raise ValueError("MAX_RETRIES must be >= 1")
             for attempt in range(1, settings.MAX_RETRIES + 1):
                 try:
                     return func(self, *args, **kwargs)
@@ -67,13 +73,15 @@ def retry(
 
 
 def _sleep_backoff(attempt: int, settings: Settings) -> None:
-    """Sleep for a short duration with exponential backoff and jitter."""
+    """Sleep for a short duration with exponential backoff, jitter, and a cap."""
     delay = (2**attempt) * random.uniform(0.8, 1.2)
+    delay = min(delay, settings.MAX_RETRY_BACKOFF_SECONDS)
     log.info(
         "Sleeping before retry",
         delay=f"{delay:.1f}s",
         attempt=attempt,
         max_retries=settings.MAX_RETRIES,
+        max_backoff=settings.MAX_RETRY_BACKOFF_SECONDS,
     )
     time.sleep(delay)
 

@@ -22,7 +22,8 @@ import structlog
 from PIL import Image
 
 from .config import Settings
-from .utils import is_blank, retry
+from .llm import OpenAIChatMixin
+from .utils import is_blank
 
 log = structlog.get_logger(__name__)
 
@@ -67,13 +68,8 @@ class OcrProvider(ABC):
         raise NotImplementedError
 
 
-class OpenAIProvider(OcrProvider):
+class OpenAIProvider(OpenAIChatMixin, OcrProvider):
     """An OCR provider that uses the OpenAI and Ollama APIs."""
-
-    @retry(retryable_exceptions=(openai.APIError,))
-    def _create_completion(self, **kwargs):
-        """A retriable version of openai.chat.completions.create."""
-        return openai.chat.completions.create(**kwargs)
 
     def transcribe_image(self, image: Image.Image) -> tuple[str, str]:
         """

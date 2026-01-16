@@ -9,7 +9,9 @@ from paperless_ocr.utils import _sleep_backoff, is_blank, retry
 
 class DummyWorker:
     def __init__(self, max_retries: int):
-        self.settings = SimpleNamespace(MAX_RETRIES=max_retries)
+        self.settings = SimpleNamespace(
+            MAX_RETRIES=max_retries, MAX_RETRY_BACKOFF_SECONDS=30
+        )
         self.calls = 0
 
     @retry(retryable_exceptions=(ValueError,))
@@ -22,7 +24,9 @@ class DummyWorker:
 
 class AlwaysFailWorker:
     def __init__(self, max_retries: int):
-        self.settings = SimpleNamespace(MAX_RETRIES=max_retries)
+        self.settings = SimpleNamespace(
+            MAX_RETRIES=max_retries, MAX_RETRY_BACKOFF_SECONDS=30
+        )
         self.calls = 0
 
     @retry(retryable_exceptions=(ValueError,))
@@ -33,7 +37,7 @@ class AlwaysFailWorker:
 
 class ZeroRetryWorker:
     def __init__(self):
-        self.settings = SimpleNamespace(MAX_RETRIES=0)
+        self.settings = SimpleNamespace(MAX_RETRIES=0, MAX_RETRY_BACKOFF_SECONDS=30)
         self.calls = 0
 
     @retry(retryable_exceptions=(ValueError,))
@@ -64,23 +68,33 @@ def test_retry_raises_after_max_retries(mocker):
     sleep_spy.assert_called_once_with(1, worker.settings)
 
 
-def test_retry_zero_retries_raises_runtime_error():
+def test_retry_zero_retries_raises_value_error():
     worker = ZeroRetryWorker()
 
-    with pytest.raises(RuntimeError, match="Retry loop exited unexpectedly"):
+    with pytest.raises(ValueError, match="MAX_RETRIES must be >= 1"):
         worker.never_called()
 
     assert worker.calls == 0
 
 
 def test_sleep_backoff_uses_exponential_delay(mocker):
-    settings = SimpleNamespace(MAX_RETRIES=5)
+    settings = SimpleNamespace(MAX_RETRIES=5, MAX_RETRY_BACKOFF_SECONDS=30)
     mocker.patch("paperless_ocr.utils.random.uniform", return_value=1.0)
     sleep_mock = mocker.patch("paperless_ocr.utils.time.sleep")
 
     _sleep_backoff(2, settings)
 
     sleep_mock.assert_called_once_with(4.0)
+
+
+def test_sleep_backoff_caps_delay(mocker):
+    settings = SimpleNamespace(MAX_RETRIES=5, MAX_RETRY_BACKOFF_SECONDS=10)
+    mocker.patch("paperless_ocr.utils.random.uniform", return_value=1.0)
+    sleep_mock = mocker.patch("paperless_ocr.utils.time.sleep")
+
+    _sleep_backoff(6, settings)
+
+    sleep_mock.assert_called_once_with(10.0)
 
 
 def test_is_blank_detects_white_and_near_white():
