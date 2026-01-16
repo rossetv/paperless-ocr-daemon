@@ -90,8 +90,9 @@ All configuration is via environment variables.
 | `CLASSIFY_PERSON_FIELD_ID` | Paperless custom field ID for "Person". | - | No |
 | `CLASSIFY_DEFAULT_COUNTRY_TAG` | Country tag to always add. | - | No |
 | `CLASSIFY_MAX_CHARS` | Max OCR characters to send to classifier (0 = no limit). | `0` | No |
-| `CLASSIFY_TAG_LIMIT` | Max number of non-required tags to keep after enrichment. | `8` | No |
-| `CLASSIFY_MAX_PAGES` | Max OCR pages to send to classifier (0 = no limit). | `5` | No |
+| `CLASSIFY_TAG_LIMIT` | Max number of non-required tags to keep after enrichment. | `5` | No |
+| `CLASSIFY_MAX_PAGES` | Max OCR pages to send to classifier (0 = no limit). | `3` | No |
+| `CLASSIFY_TAIL_PAGES` | Extra OCR pages from the end to include when truncating. | `2` | No |
 | `CLASSIFY_HEADERLESS_CHAR_LIMIT` | Char limit used when OCR page headers are missing. | `15000` | No |
 
 Notes:
@@ -110,7 +111,7 @@ Notes:
 - If OCR content is empty, the classifier removes the OCR tag and re-adds the inbox tag so OCR runs again.
 - Classification relies on `MAX_RETRIES` in the API client; if both models fail or return empty output, the document is marked with `ERROR_TAG_ID` and pipeline tags are removed.
 - If a document already has `ERROR_TAG_ID`, classification is skipped and pipeline tags are removed.
-- Page truncation uses the first `CLASSIFY_MAX_PAGES` pages. If no page headers are present, it falls back to `CLASSIFY_HEADERLESS_CHAR_LIMIT`.
+- Page truncation uses the first `CLASSIFY_MAX_PAGES` pages plus the last `CLASSIFY_TAIL_PAGES` pages. If no page headers are present, it falls back to `CLASSIFY_HEADERLESS_CHAR_LIMIT`.
 - Required tags (year, country, model markers, error markers) are always included and do not count toward `CLASSIFY_TAG_LIMIT`.
 - The prompt includes up to 100 correspondents, document types, and tags, sorted by usage.
 

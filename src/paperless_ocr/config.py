@@ -73,6 +73,7 @@ class Settings:
     CLASSIFY_MAX_CHARS: int
     CLASSIFY_TAG_LIMIT: int
     CLASSIFY_MAX_PAGES: int
+    CLASSIFY_TAIL_PAGES: int
     CLASSIFY_HEADERLESS_CHAR_LIMIT: int
 
     def __init__(self):
@@ -154,8 +155,9 @@ class Settings:
             "CLASSIFY_DEFAULT_COUNTRY_TAG", ""
         ).strip()
         self.CLASSIFY_MAX_CHARS = int(os.getenv("CLASSIFY_MAX_CHARS", "0"))
-        self.CLASSIFY_TAG_LIMIT = max(0, int(os.getenv("CLASSIFY_TAG_LIMIT", "8")))
-        self.CLASSIFY_MAX_PAGES = max(0, int(os.getenv("CLASSIFY_MAX_PAGES", "5")))
+        self.CLASSIFY_TAG_LIMIT = max(0, int(os.getenv("CLASSIFY_TAG_LIMIT", "5")))
+        self.CLASSIFY_MAX_PAGES = max(0, int(os.getenv("CLASSIFY_MAX_PAGES", "3")))
+        self.CLASSIFY_TAIL_PAGES = max(0, int(os.getenv("CLASSIFY_TAIL_PAGES", "2")))
         self.CLASSIFY_HEADERLESS_CHAR_LIMIT = max(
             0, int(os.getenv("CLASSIFY_HEADERLESS_CHAR_LIMIT", "15000"))
         )

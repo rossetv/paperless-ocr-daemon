@@ -34,6 +34,14 @@ def test_enrich_tags_trims_to_limit():
     assert "Ireland" in result
 
 
+def test_enrich_tags_extracts_multiple_models():
+    text = "Content\n\nTranscribed by model: gpt-5-mini, o4-mini"
+    result = enrich_tags([], text, "2024-01-01", "", 8)
+
+    assert "gpt-5-mini" in result
+    assert "o4-mini" in result
+
+
 def test_truncate_content_by_pages_limits_pages_and_keeps_footer():
     content = (
         "--- Page 1 ---\n"
@@ -45,28 +53,53 @@ def test_truncate_content_by_pages_limits_pages_and_keeps_footer():
         "\n\nTranscribed by model: gpt-5-mini"
     )
 
-    result = truncate_content_by_pages(content, 2, 1000)
+    result, note = truncate_content_by_pages(content, 2, 0, 1000)
 
     assert "--- Page 1 ---" in result
     assert "--- Page 2 ---" in result
     assert "--- Page 3 ---" not in result
     assert "Transcribed by model: gpt-5-mini" in result
+    assert note is not None
 
 
 def test_truncate_content_by_pages_no_headers_returns_full():
     content = "Single page content"
 
-    result = truncate_content_by_pages(content, 5, 1000)
+    result, note = truncate_content_by_pages(content, 5, 0, 1000)
 
     assert result == content
+    assert note is None
 
 
 def test_truncate_content_by_pages_no_headers_truncates_by_chars():
     content = "A" * (200 + 10)
 
-    result = truncate_content_by_pages(content, 5, 200)
+    result, note = truncate_content_by_pages(content, 5, 0, 200)
 
     assert len(result) == 200
+    assert note is not None
+
+
+def test_truncate_content_by_pages_includes_tail_pages():
+    content = (
+        "--- Page 1 ---\nA\n\n"
+        "--- Page 2 ---\nB\n\n"
+        "--- Page 3 ---\nC\n\n"
+        "--- Page 4 ---\nD\n\n"
+        "--- Page 5 ---\nE\n\n"
+        "--- Page 6 ---\nF\n\n"
+        "\n\nTranscribed by model: gpt-5-mini"
+    )
+
+    result, note = truncate_content_by_pages(content, 3, 2, 1000)
+
+    assert "--- Page 1 ---" in result
+    assert "--- Page 2 ---" in result
+    assert "--- Page 3 ---" in result
+    assert "--- Page 4 ---" not in result
+    assert "--- Page 5 ---" in result
+    assert "--- Page 6 ---" in result
+    assert note is not None
 
 
 @pytest.fixture

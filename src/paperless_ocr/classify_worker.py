@@ -27,15 +27,8 @@ ERROR_PHRASES = [
     "chatgpt refused to transcribe",
 ]
 
-MODEL_TAG_MARKERS = {
-    "transcribed by model: o4-mini": "o4-mini",
-    "transcribed by model: gpt-5-mini": "gpt-5-mini",
-    "transcribed by model: gpt-5": "gpt-5",
-    "transcribed by model: gemma3:27b": "gemma3:27b",
-    "transcribed by model: gemma3:12b": "gemma3:12b",
-}
-
 PAGE_HEADER_RE = re.compile(r"^--- Page \d+ ---$", re.MULTILINE)
+MODEL_FOOTER_RE = re.compile(r"transcribed by model:\s*(.+)", re.IGNORECASE)
 
 MAX_TAXONOMY_CHOICES = 100
 
@@ -148,6 +141,24 @@ def _needs_error_tag(text: str) -> bool:
     return any(phrase in text_lower for phrase in ERROR_PHRASES)
 
 
+def _extract_model_tags(text: str) -> list[str]:
+    """
+    Extract model tags from any "Transcribed by model:" markers in the text.
+    """
+    matches = list(MODEL_FOOTER_RE.finditer(text))
+    if not matches:
+        return []
+
+    tags = []
+    for match in matches:
+        value = match.group(1).splitlines()[0]
+        for token in value.split(","):
+            tag = token.strip()
+            if tag:
+                tags.append(tag)
+    return _dedupe_tags(tags)
+
+
 def _split_footer(content: str) -> tuple[str, str]:
     """Split OCR footer to keep model markers when truncating."""
     marker = "\n\nTranscribed by model:"
@@ -155,6 +166,66 @@ def _split_footer(content: str) -> tuple[str, str]:
     if index == -1:
         return content, ""
     return content[:index], content[index:]
+
+
+def _extract_page_numbers(matches: list[re.Match]) -> list[int]:
+    """Extract page numbers from OCR header matches."""
+    numbers = []
+    for match in matches:
+        raw = match.group(0)
+        num_match = re.search(r"\d+", raw)
+        if num_match:
+            numbers.append(int(num_match.group()))
+        else:
+            numbers.append(len(numbers) + 1)
+    return numbers
+
+
+def _format_page_ranges(page_numbers: list[int]) -> str:
+    """Format a list of page numbers as compact ranges."""
+    if not page_numbers:
+        return ""
+    ordered = sorted(set(page_numbers))
+    ranges = []
+    start = ordered[0]
+    prev = ordered[0]
+    for num in ordered[1:]:
+        if num == prev + 1:
+            prev = num
+            continue
+        ranges.append((start, prev))
+        start = prev = num
+    ranges.append((start, prev))
+    parts = []
+    for start, end in ranges:
+        parts.append(str(start) if start == end else f"{start}-{end}")
+    return ", ".join(parts)
+
+
+def _page_truncation_note(included_pages: list[int], total_pages: int) -> str:
+    """Build a note describing which OCR pages are included."""
+    ranges = _format_page_ranges(included_pages)
+    return (
+        "NOTE: The document transcription below was truncated to reduce cost. "
+        f"Included pages (from OCR headers): {ranges}. "
+        f"Total pages with OCR headers: {total_pages}."
+    )
+
+
+def _headerless_truncation_note(limit: int) -> str:
+    """Build a note describing headerless truncation by character count."""
+    return (
+        "NOTE: The document transcription below was truncated because page headers "
+        f"were not found. Included the first {limit} characters."
+    )
+
+
+def _max_char_truncation_note(limit: int) -> str:
+    """Build a note describing extra truncation by max character limit."""
+    return (
+        "NOTE: The document transcription below was further truncated to the first "
+        f"{limit} characters due to the max character limit."
+    )
 
 
 def truncate_content_by_chars(content: str, max_chars: int) -> str:
@@ -170,22 +241,28 @@ def truncate_content_by_chars(content: str, max_chars: int) -> str:
 def truncate_content_by_pages(
     content: str,
     max_pages: int,
+    tail_pages: int,
     headerless_char_limit: int,
-) -> str:
+) -> tuple[str, str | None]:
     """
-    Truncate OCR content to the first N pages using page headers.
+    Truncate OCR content to the first N pages and last N pages using page headers.
     Falls back to a character limit if no page headers are present.
     """
     if max_pages <= 0:
-        return content
+        return content, None
 
     body, footer = _split_footer(content)
     matches = list(PAGE_HEADER_RE.finditer(body))
     if not matches:
-        return truncate_content_by_chars(content, headerless_char_limit)
+        truncated = truncate_content_by_chars(content, headerless_char_limit)
+        if truncated == content:
+            return content, None
+        return truncated, _headerless_truncation_note(headerless_char_limit)
 
-    if len(matches) <= max_pages:
-        return body + footer
+    page_numbers = _extract_page_numbers(matches)
+    total_pages = len(matches)
+    if total_pages <= max_pages:
+        return body + footer, None
 
     segments: list[str] = []
     for idx, match in enumerate(matches):
@@ -193,7 +270,20 @@ def truncate_content_by_pages(
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(body)
         segments.append(body[start:end])
 
-    return "".join(segments[:max_pages]) + footer
+    include = set(range(min(max_pages, total_pages)))
+    tail_pages = max(0, tail_pages)
+    if tail_pages:
+        tail_start = max(total_pages - tail_pages, 0)
+        include.update(range(tail_start, total_pages))
+
+    include_indices = sorted(include)
+    if len(include_indices) >= total_pages:
+        return body + footer, None
+
+    truncated_body = "".join(segments[index] for index in include_indices)
+    included_pages = [page_numbers[index] for index in include_indices]
+    note = _page_truncation_note(included_pages, total_pages)
+    return truncated_body + footer, note
 
 
 def enrich_tags(
@@ -216,9 +306,7 @@ def enrich_tags(
     if any(phrase in text_lower for phrase in ERROR_PHRASES):
         required_tags.append("ERROR")
 
-    for marker, tag in MODEL_TAG_MARKERS.items():
-        if marker in text_lower:
-            required_tags.append(tag)
+    required_tags.extend(_extract_model_tags(text))
 
     year_tag = _extract_year(document_date) or dt.date.today().strftime("%Y")
     required_tags.append(year_tag)
@@ -486,29 +574,30 @@ class ClassificationProcessor:
             return
 
         input_text = content
+        truncation_notes: list[str] = []
         if self.settings.CLASSIFY_MAX_PAGES > 0:
-            truncated = truncate_content_by_pages(
+            truncated, note = truncate_content_by_pages(
                 content,
                 self.settings.CLASSIFY_MAX_PAGES,
+                self.settings.CLASSIFY_TAIL_PAGES,
                 self.settings.CLASSIFY_HEADERLESS_CHAR_LIMIT,
             )
             if truncated != content:
                 input_text = truncated
-                if PAGE_HEADER_RE.search(content):
-                    log.info(
-                        "Truncated document content for classification",
-                        doc_id=self.doc_id,
-                        max_pages=self.settings.CLASSIFY_MAX_PAGES,
-                    )
-                else:
-                    log.info(
-                        "Truncated document content for classification",
-                        doc_id=self.doc_id,
-                        max_chars=self.settings.CLASSIFY_HEADERLESS_CHAR_LIMIT,
-                    )
+                if note:
+                    truncation_notes.append(note)
+                log.info(
+                    "Truncated document content for classification",
+                    doc_id=self.doc_id,
+                    max_pages=self.settings.CLASSIFY_MAX_PAGES,
+                    tail_pages=self.settings.CLASSIFY_TAIL_PAGES,
+                )
 
         if self.settings.CLASSIFY_MAX_CHARS > 0 and len(input_text) > self.settings.CLASSIFY_MAX_CHARS:
             input_text = input_text[: self.settings.CLASSIFY_MAX_CHARS]
+            truncation_notes.append(
+                _max_char_truncation_note(self.settings.CLASSIFY_MAX_CHARS)
+            )
             log.info(
                 "Truncated document content for classification",
                 doc_id=self.doc_id,
@@ -520,6 +609,7 @@ class ClassificationProcessor:
             self.taxonomy_cache.correspondent_names(),
             self.taxonomy_cache.document_type_names(),
             self.taxonomy_cache.tag_names(),
+            truncation_note="\n".join(truncation_notes) if truncation_notes else None,
         )
         if not result or _is_empty_classification(result):
             log.warning("Classification failed", doc_id=self.doc_id)

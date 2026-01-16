@@ -223,6 +223,7 @@ class ClassificationProvider(OpenAIChatMixin):
         correspondents: list[str],
         document_types: list[str],
         tags: list[str],
+        truncation_note: str | None = None,
     ) -> tuple[ClassificationResult | None, str]:
         """
         Classify OCR text with context lists, returning (result, model_used).
@@ -231,7 +232,10 @@ class ClassificationProvider(OpenAIChatMixin):
             log.warning("Document content is empty; skipping classification.")
             return None, ""
 
-        user_content = (
+        user_content = ""
+        if truncation_note:
+            user_content += f"{truncation_note}\n\n"
+        user_content += (
             "Existing correspondents (prefer these when possible):\n"
             f"{json.dumps(correspondents, ensure_ascii=True)}\n\n"
             "Existing document types (prefer these when possible):\n"

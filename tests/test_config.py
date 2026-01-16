@@ -28,8 +28,9 @@ def test_settings_default_values(mocker):
     assert settings.OCR_DPI == 300
     assert settings.CLASSIFY_PRE_TAG_ID == settings.POST_TAG_ID
     assert settings.CLASSIFY_POST_TAG_ID is None
-    assert settings.CLASSIFY_TAG_LIMIT == 8
-    assert settings.CLASSIFY_MAX_PAGES == 5
+    assert settings.CLASSIFY_TAG_LIMIT == 5
+    assert settings.CLASSIFY_MAX_PAGES == 3
+    assert settings.CLASSIFY_TAIL_PAGES == 2
     assert settings.CLASSIFY_HEADERLESS_CHAR_LIMIT == 15000
     assert settings.ERROR_TAG_ID == 552
 
@@ -54,6 +55,7 @@ def test_settings_from_environment_variables(mocker):
             "CLASSIFY_POST_TAG_ID": "556",
             "CLASSIFY_DEFAULT_COUNTRY_TAG": "Ireland",
             "CLASSIFY_MAX_PAGES": "2",
+            "CLASSIFY_TAIL_PAGES": "3",
             "ERROR_TAG_ID": "999",
             "CLASSIFY_HEADERLESS_CHAR_LIMIT": "1200",
         },
@@ -74,6 +76,7 @@ def test_settings_from_environment_variables(mocker):
     assert settings.CLASSIFY_POST_TAG_ID == 556
     assert settings.CLASSIFY_DEFAULT_COUNTRY_TAG == "Ireland"
     assert settings.CLASSIFY_MAX_PAGES == 2
+    assert settings.CLASSIFY_TAIL_PAGES == 3
     assert settings.CLASSIFY_HEADERLESS_CHAR_LIMIT == 1200
     assert settings.ERROR_TAG_ID == 999
 
