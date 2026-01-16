@@ -155,7 +155,7 @@ def test_create_tag(paperless_client, settings, requests_mock):
     """
     Test creating a tag in Paperless.
     """
-    requests_mock.post(
+    mock_post = requests_mock.post(
         f"{settings.PAPERLESS_URL}/api/tags/",
         json={"id": 9, "name": "NewTag"},
         status_code=201,
@@ -165,6 +165,10 @@ def test_create_tag(paperless_client, settings, requests_mock):
 
     assert created["id"] == 9
     assert created["name"] == "NewTag"
+    assert mock_post.last_request.json() == {
+        "name": "NewTag",
+        "matching_algorithm": "none",
+    }
 
 
 def test_update_document_metadata(paperless_client, settings, requests_mock):

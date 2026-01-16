@@ -53,6 +53,20 @@ COMPANY_SUFFIXES = {
     "as",
 }
 
+GENERIC_DOCUMENT_TYPES = {
+    "document",
+    "documents",
+    "other",
+    "misc",
+    "miscellaneous",
+    "unknown",
+    "general",
+    "unspecified",
+    "n/a",
+    "na",
+    "none",
+}
+
 
 def _normalize_simple(value: str) -> str:
     """Normalize strings by collapsing whitespace and lowercasing."""
@@ -61,7 +75,7 @@ def _normalize_simple(value: str) -> str:
 
 def _normalize_name(value: str) -> str:
     """Normalize organisation names, stripping punctuation and common suffixes."""
-    cleaned = re.sub(r"[^a-z0-9\\s]", "", value.lower())
+    cleaned = re.sub(r"[^a-z0-9\s]", "", value.lower())
     parts = cleaned.split()
     while parts and parts[-1] in COMPANY_SUFFIXES:
         parts.pop()
@@ -82,6 +96,33 @@ def _dedupe_tags(tags: Iterable[str]) -> list[str]:
         seen.add(key)
         output.append(tag)
     return output
+
+
+def _filter_redundant_tags(
+    tags: Iterable[str],
+    correspondent: str,
+    document_type: str,
+    person: str,
+) -> list[str]:
+    """
+    Remove tags that duplicate the correspondent, document type, or person name.
+    """
+    correspondent_key = _normalize_name(correspondent) if correspondent else ""
+    document_type_key = _normalize_simple(document_type) if document_type else ""
+    person_key = _normalize_simple(person) if person else ""
+
+    filtered = []
+    for tag in _dedupe_tags(tags):
+        tag_simple = _normalize_simple(tag)
+        tag_name = _normalize_name(tag)
+        if correspondent_key and (tag_simple == correspondent_key or tag_name == correspondent_key):
+            continue
+        if document_type_key and tag_simple == document_type_key:
+            continue
+        if person_key and tag_simple == person_key:
+            continue
+        filtered.append(tag)
+    return filtered
 
 
 def _extract_year(value: str) -> str | None:
@@ -133,6 +174,14 @@ def _normalize_language(language: str) -> str | None:
         if len(prefix) == 2 and prefix.isalpha():
             return prefix
     return "und"
+
+
+def _is_generic_document_type(value: str) -> bool:
+    """Return True if the document type looks like a generic placeholder."""
+    if not value:
+        return True
+    normalized = _normalize_simple(value)
+    return normalized in GENERIC_DOCUMENT_TYPES
 
 
 def _needs_error_tag(text: str) -> bool:
@@ -478,7 +527,19 @@ class TaxonomyCache:
 
     def get_or_create_tag_ids(self, tags: Iterable[str]) -> list[int]:
         """Resolve or create tags, returning their IDs."""
+        matching_algorithm = None
         ids = []
+        with self._lock:
+            for tag in self._tags:
+                value = tag.get("matching_algorithm")
+                if isinstance(value, int):
+                    matching_algorithm = 0
+                    break
+                if isinstance(value, str):
+                    matching_algorithm = "none"
+                    break
+        if matching_algorithm is None:
+            matching_algorithm = "none"
         for tag in _dedupe_tags(tags):
             with self._lock:
                 matched = _match_item(tag, self._tag_map, _normalize_simple, False)
@@ -486,10 +547,24 @@ class TaxonomyCache:
                     ids.append(matched.get("id"))
                     continue
                 try:
-                    created = self._client.create_tag(tag.strip())
+                    created = self._client.create_tag(
+                        tag.strip(), matching_algorithm=matching_algorithm
+                    )
                 except Exception:
                     log.warning("Failed to create tag; refreshing cache", name=tag)
                     self.refresh()
+                    matching_algorithm = None
+                    with self._lock:
+                        for tag_item in self._tags:
+                            value = tag_item.get("matching_algorithm")
+                            if isinstance(value, int):
+                                matching_algorithm = 0
+                                break
+                            if isinstance(value, str):
+                                matching_algorithm = "none"
+                                break
+                    if matching_algorithm is None:
+                        matching_algorithm = "none"
                     matched = _match_item(tag, self._tag_map, _normalize_simple, False)
                     if matched:
                         ids.append(matched.get("id"))
@@ -615,6 +690,14 @@ class ClassificationProcessor:
             log.warning("Classification failed", doc_id=self.doc_id)
             self._finalize_with_error(current_tags)
             return
+        if _is_generic_document_type(result.document_type):
+            log.warning(
+                "Classification returned generic document type",
+                doc_id=self.doc_id,
+                document_type=result.document_type,
+            )
+            self._finalize_with_error(current_tags)
+            return
 
         self._apply_classification(document, content, result, model)
 
@@ -660,8 +743,14 @@ class ClassificationProcessor:
         error_required = _needs_error_tag(content)
         parsed_date = _parse_document_date(result.document_date)
         date_for_tags = _resolve_date_for_tags(parsed_date, document.get("created"))
-        tags = enrich_tags(
+        base_tags = _filter_redundant_tags(
             result.tags,
+            result.correspondent,
+            result.document_type,
+            result.person,
+        )
+        tags = enrich_tags(
+            base_tags,
             content,
             date_for_tags,
             self.settings.CLASSIFY_DEFAULT_COUNTRY_TAG,

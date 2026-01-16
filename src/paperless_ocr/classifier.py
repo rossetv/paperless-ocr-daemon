@@ -82,6 +82,8 @@ Field-by-field rules
   - Up to 8; prefer to reuse existing tag vocabulary when possible.
   - Always add a year tag ("2025") and a country tag ("Ireland" etc.).
   - Avoid redundant, overly narrow, or generic tags.
+  - Do NOT add tags that duplicate the correspondent name, document type, or person name.
+  - There is a maximum tag limit, not a minimum; do not add filler tags.
 
 - document_date
   - Choose the single most relevant date (issue, signature, etc.).
@@ -91,6 +93,8 @@ Field-by-field rules
 - document_type
   - One precise label, e.g. "Invoice", "Payslip", "Bank Statement",
     "Insurance Policy", "Tax Summary", "Letter", "Medical Report" ...
+  - Prefer to reuse existing document types when possible; avoid near-duplicates.
+  - Do not use generic placeholders like "Document", "Other", or "Unknown".
 
 - language
   - ISO-639-1 code ("en", "de", "pt"...). If unsure: "und".

@@ -222,16 +222,39 @@ class PaperlessClient:
         response.raise_for_status()
         return response.json()
 
-    def create_tag(self, name: str) -> dict:
+    def create_tag(self, name: str, matching_algorithm: str | int | None = "none") -> dict:
         """
         Create a new tag and return the created object.
         """
         url = f"{self.settings.PAPERLESS_URL}/api/tags/"
         payload = {"name": name}
-        log.info("Creating tag", name=name)
-        response = self._post(url, json=payload)
-        response.raise_for_status()
-        return response.json()
+        if matching_algorithm is not None:
+            payload["matching_algorithm"] = matching_algorithm
+        log.info("Creating tag", name=name, matching_algorithm=matching_algorithm)
+
+        candidates: list[str | int | None] = []
+        if matching_algorithm is None:
+            candidates = [None]
+        elif isinstance(matching_algorithm, str):
+            candidates = [matching_algorithm, 0]
+        elif isinstance(matching_algorithm, int):
+            candidates = [matching_algorithm, "none"]
+        else:
+            candidates = [matching_algorithm]
+
+        for index, candidate in enumerate(candidates):
+            payload = {"name": name}
+            if candidate is not None:
+                payload["matching_algorithm"] = candidate
+            response = self._post(url, json=payload)
+            try:
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.HTTPError:
+                if response.status_code != 400 or index == len(candidates) - 1:
+                    raise
+
+        raise RuntimeError("Tag creation failed after all matching_algorithm attempts.")
 
     def close(self) -> None:
         """Close the underlying HTTP session."""
