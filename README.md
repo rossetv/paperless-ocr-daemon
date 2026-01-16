@@ -85,7 +85,7 @@ All configuration is via environment variables.
 | `CLASSIFY_PRE_TAG_ID` | Tag ID for documents to classify. | `POST_TAG_ID` | No |
 | `CLASSIFY_POST_TAG_ID` | Optional tag ID to apply after classification. | - | No |
 | `ERROR_TAG_ID` | Tag ID for OCR/classification error marker. | `552` | No |
-| `CLASSIFY_MODEL` | Model for classification. | `gpt-5.2` | No |
+| `CLASSIFY_MODEL` | Model for classification. | `PRIMARY_MODEL` | No |
 | `CLASSIFY_FALLBACK_MODEL` | Fallback model for classification. | `FALLBACK_MODEL` | No |
 | `CLASSIFY_PERSON_FIELD_ID` | Paperless custom field ID for "Person". | - | No |
 | `CLASSIFY_DEFAULT_COUNTRY_TAG` | Country tag to always add. | - | No |
