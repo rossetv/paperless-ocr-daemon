@@ -81,9 +81,11 @@ Field-by-field rules
 - tags
   - Up to 8; prefer to reuse existing tag vocabulary when possible.
   - Always add a year tag ("2025") and a country tag ("Ireland" etc.).
+  - Return tags in lowercase.
   - Avoid redundant, overly narrow, or generic tags.
   - Do NOT add tags that duplicate the correspondent name, document type, or person name.
   - There is a maximum tag limit, not a minimum; do not add filler tags.
+  - Do NOT add tags named: "new", "ai", "error", "indexed".
 
 - document_date
   - Choose the single most relevant date (issue, signature, etc.).

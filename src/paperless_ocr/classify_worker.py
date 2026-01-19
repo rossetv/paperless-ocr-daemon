@@ -68,6 +68,13 @@ GENERIC_DOCUMENT_TYPES = {
     "none",
 }
 
+BLACKLISTED_TAGS = {
+    "new",
+    "ai",
+    "error",
+    "indexed",
+}
+
 
 def _normalize_simple(value: str) -> str:
     """Normalize strings by collapsing whitespace and lowercasing."""
@@ -121,6 +128,16 @@ def _filter_redundant_tags(
         if document_type_key and tag_simple == document_type_key:
             continue
         if person_key and tag_simple == person_key:
+            continue
+        filtered.append(tag)
+    return filtered
+
+
+def _filter_blacklisted_tags(tags: Iterable[str]) -> list[str]:
+    """Remove tags that are explicitly blacklisted."""
+    filtered = []
+    for tag in _dedupe_tags(tags):
+        if _normalize_simple(tag) in BLACKLISTED_TAGS:
             continue
         filtered.append(tag)
     return filtered
@@ -380,7 +397,8 @@ def enrich_tags(
             after=len(trimmed),
         )
 
-    return _dedupe_tags(required_tags + trimmed)
+    combined = _dedupe_tags(required_tags + trimmed)
+    return [tag.lower() for tag in combined]
 
 
 def _index_items(items: list[dict], normalizer) -> dict[str, dict]:
@@ -751,8 +769,9 @@ class ClassificationProcessor:
             return
         parsed_date = _parse_document_date(result.document_date)
         date_for_tags = _resolve_date_for_tags(parsed_date, document.get("created"))
+        base_tags = _filter_blacklisted_tags(result.tags)
         base_tags = _filter_redundant_tags(
-            result.tags,
+            base_tags,
             result.correspondent,
             result.document_type,
             result.person,

@@ -9,6 +9,7 @@ from paperless_ocr.classify_worker import (
     enrich_tags,
     truncate_content_by_pages,
     _filter_redundant_tags,
+    _filter_blacklisted_tags,
 )
 from paperless_ocr.classifier import ClassificationResult
 from paperless_ocr.config import Settings
@@ -22,11 +23,11 @@ def test_enrich_tags_adds_required_tags():
     tags = ["Bills"]
     result = enrich_tags(tags, text, "2024-03-01", "Ireland", 8)
 
-    assert "Bills" in result
-    assert "ERROR" in result
+    assert "bills" in result
+    assert "error" in result
     assert "gpt-5-mini" in result
     assert "2024" in result
-    assert "Ireland" in result
+    assert "ireland" in result
 
 
 def test_enrich_tags_trims_to_limit():
@@ -37,7 +38,7 @@ def test_enrich_tags_trims_to_limit():
     assert len(result) == 7
     assert "gpt-5" in result
     assert "2024" in result
-    assert "Ireland" in result
+    assert "ireland" in result
 
 
 def test_enrich_tags_extracts_multiple_models():
@@ -56,6 +57,13 @@ def test_filter_redundant_tags_drops_correspondent_and_type_and_person():
         document_type="Bank Statement",
         person="Vilmar Henrique Rosset",
     )
+
+    assert filtered == ["Bills"]
+
+
+def test_filter_blacklisted_tags_drops_blocked_names():
+    tags = ["New", "AI", "Error", "Indexed", "Bills"]
+    filtered = _filter_blacklisted_tags(tags)
 
     assert filtered == ["Bills"]
 
