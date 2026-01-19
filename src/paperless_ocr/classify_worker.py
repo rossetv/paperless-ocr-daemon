@@ -25,6 +25,7 @@ ERROR_PHRASES = [
     "i'm sorry, i can't assist with that.",
     "i can't assist with that",
     "chatgpt refused to transcribe",
+    "[redacted]",
 ]
 
 PAGE_HEADER_RE = re.compile(r"^--- Page \d+ ---$", re.MULTILINE)
@@ -726,10 +727,10 @@ class ClassificationProcessor:
 
     def _finalize_with_error(self, tags: set[int]) -> None:
         """Mark the document with an error tag and clear processing tags."""
-        updated = self._clean_processing_tags(tags)
-        if self.settings.ERROR_TAG_ID:
-            updated.add(self.settings.ERROR_TAG_ID)
-        self._update_tags(updated)
+        if not self.settings.ERROR_TAG_ID:
+            log.warning("Error tag is not configured; skipping error tagging", doc_id=self.doc_id)
+            return
+        self._update_tags({self.settings.ERROR_TAG_ID})
         log.warning("Marked document as classification error", doc_id=self.doc_id)
 
     def _apply_classification(
@@ -741,6 +742,13 @@ class ClassificationProcessor:
     ) -> None:
         """Apply classifier output to Paperless metadata and tags."""
         error_required = _needs_error_tag(content)
+        if error_required:
+            log.warning(
+                "OCR content contains refusal markers; marking error",
+                doc_id=self.doc_id,
+            )
+            self._finalize_with_error(set(document.get("tags", [])))
+            return
         parsed_date = _parse_document_date(result.document_date)
         date_for_tags = _resolve_date_for_tags(parsed_date, document.get("created"))
         base_tags = _filter_redundant_tags(

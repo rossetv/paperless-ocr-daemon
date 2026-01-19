@@ -60,6 +60,16 @@ class DocumentProcessor:
         log.info("Processing document", doc_id=self.doc_id, title=self.title)
         start_time = dt.datetime.now()
 
+        if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in self.doc.get(
+            "tags", []
+        ):
+            log.warning(
+                "Document has error tag; skipping OCR",
+                doc_id=self.doc_id,
+            )
+            self._set_error_only_tags()
+            return
+
         content, content_type = self.paperless_client.download_content(self.doc_id)
         extension = ".pdf" if "pdf" in content_type else ".bin"
 
@@ -146,6 +156,18 @@ class DocumentProcessor:
         """
         Update the document in Paperless with the new content and tags.
         """
+        if self.settings.ERROR_TAG_ID and (
+            self.settings.REFUSAL_MARK in full_text or "[REDACTED]" in full_text
+        ):
+            self.paperless_client.update_document(
+                self.doc_id, full_text, [self.settings.ERROR_TAG_ID]
+            )
+            log.warning(
+                "OCR produced refusal/redacted content; marking error",
+                doc_id=self.doc_id,
+            )
+            return
+
         current_tags = set(self.doc.get("tags", []))
         try:
             latest = self.paperless_client.get_document(self.doc_id)
@@ -173,4 +195,12 @@ class DocumentProcessor:
             doc_id=self.doc_id,
             removed_tag=self.settings.PRE_TAG_ID,
             added_tag=self.settings.POST_TAG_ID,
+        )
+
+    def _set_error_only_tags(self) -> None:
+        """Replace all tags with the error tag."""
+        if not self.settings.ERROR_TAG_ID:
+            return
+        self.paperless_client.update_document_metadata(
+            self.doc_id, tags=[self.settings.ERROR_TAG_ID]
         )

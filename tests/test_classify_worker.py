@@ -96,7 +96,7 @@ def test_classification_with_generic_document_type_marks_error(settings):
     paperless_client.update_document_metadata.assert_called_once()
     args, kwargs = paperless_client.update_document_metadata.call_args
     assert args[0] == 3
-    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID, 77}
+    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID}
 
 
 def test_truncate_content_by_pages_limits_pages_and_keeps_footer():
@@ -199,7 +199,7 @@ def test_skips_classification_when_error_tag_present(settings):
     paperless_client.update_document_metadata.assert_called_once()
     args, kwargs = paperless_client.update_document_metadata.call_args
     assert args[0] == 1
-    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID, 99}
+    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID}
     classifier.classify_text.assert_not_called()
 
 

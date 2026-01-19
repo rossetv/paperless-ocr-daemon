@@ -51,7 +51,8 @@ Do not ask me any questions, just transcribe the document. You are part of a doc
 
 def _is_refusal(text: str) -> bool:
     """Check if the model declined the task (case-insensitive substring match)."""
-    return "i can't assist" in text.lower()
+    text_lower = text.lower()
+    return "i can't assist" in text_lower or "[redacted]" in text_lower
 
 
 class OcrProvider(ABC):
