@@ -31,8 +31,6 @@ ERROR_PHRASES = [
 PAGE_HEADER_RE = re.compile(r"^--- Page \d+ ---$", re.MULTILINE)
 MODEL_FOOTER_RE = re.compile(r"transcribed by model:\s*(.+)", re.IGNORECASE)
 
-MAX_TAXONOMY_CHOICES = 100
-
 COMPANY_SUFFIXES = {
     "ltd",
     "limited",
@@ -467,8 +465,9 @@ class TaxonomyCache:
     Cache and helper for correspondents, document types, and tags.
     """
 
-    def __init__(self, paperless_client: PaperlessClient):
+    def __init__(self, paperless_client: PaperlessClient, taxonomy_limit: int):
         self._client = paperless_client
+        self._taxonomy_limit = max(0, taxonomy_limit)
         self._lock = threading.RLock()
         self._correspondents: list[dict] = []
         self._document_types: list[dict] = []
@@ -490,17 +489,17 @@ class TaxonomyCache:
     def correspondent_names(self) -> list[str]:
         """Return correspondent names for prompt context."""
         with self._lock:
-            return _top_names(self._correspondents, MAX_TAXONOMY_CHOICES)
+            return _top_names(self._correspondents, self._taxonomy_limit)
 
     def document_type_names(self) -> list[str]:
         """Return document type names for prompt context."""
         with self._lock:
-            return _top_names(self._document_types, MAX_TAXONOMY_CHOICES)
+            return _top_names(self._document_types, self._taxonomy_limit)
 
     def tag_names(self) -> list[str]:
         """Return tag names for prompt context."""
         with self._lock:
-            return _top_names(self._tags, MAX_TAXONOMY_CHOICES)
+            return _top_names(self._tags, self._taxonomy_limit)
 
     def get_or_create_correspondent_id(self, name: str) -> int | None:
         """Resolve or create a correspondent, returning its ID."""
@@ -652,73 +651,87 @@ class ClassificationProcessor:
     def process(self) -> None:
         """Run the classification workflow with retries and tag handling."""
         log.info("Classifying document", doc_id=self.doc_id, title=self.title)
+        claimed = False
+        try:
+            document = self.paperless_client.get_document(self.doc_id)
+            content = document.get("content", "") or ""
+            current_tags = set(document.get("tags", []))
 
-        document = self.paperless_client.get_document(self.doc_id)
-        content = document.get("content", "") or ""
-        current_tags = set(document.get("tags", []))
+            if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in current_tags:
+                log.warning(
+                    "Document has error tag; skipping classification", doc_id=self.doc_id
+                )
+                self._finalize_with_error(current_tags)
+                return
 
-        if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in current_tags:
-            log.warning("Document has error tag; skipping classification", doc_id=self.doc_id)
-            self._finalize_with_error(current_tags)
-            return
+            claimed = self._claim_processing_tag(current_tags)
+            if not claimed:
+                return
 
-        if not content.strip():
-            log.warning("Document has no OCR content; requeueing", doc_id=self.doc_id)
-            self._requeue_for_ocr(current_tags)
-            return
+            if not content.strip():
+                log.warning("Document has no OCR content; requeueing", doc_id=self.doc_id)
+                self._requeue_for_ocr(current_tags)
+                return
 
-        input_text = content
-        truncation_notes: list[str] = []
-        if self.settings.CLASSIFY_MAX_PAGES > 0:
-            truncated, note = truncate_content_by_pages(
-                content,
-                self.settings.CLASSIFY_MAX_PAGES,
-                self.settings.CLASSIFY_TAIL_PAGES,
-                self.settings.CLASSIFY_HEADERLESS_CHAR_LIMIT,
-            )
-            if truncated != content:
-                input_text = truncated
-                if note:
-                    truncation_notes.append(note)
+            input_text = content
+            truncation_notes: list[str] = []
+            if self.settings.CLASSIFY_MAX_PAGES > 0:
+                truncated, note = truncate_content_by_pages(
+                    content,
+                    self.settings.CLASSIFY_MAX_PAGES,
+                    self.settings.CLASSIFY_TAIL_PAGES,
+                    self.settings.CLASSIFY_HEADERLESS_CHAR_LIMIT,
+                )
+                if truncated != content:
+                    input_text = truncated
+                    if note:
+                        truncation_notes.append(note)
+                    log.info(
+                        "Truncated document content for classification",
+                        doc_id=self.doc_id,
+                        max_pages=self.settings.CLASSIFY_MAX_PAGES,
+                        tail_pages=self.settings.CLASSIFY_TAIL_PAGES,
+                    )
+
+            if (
+                self.settings.CLASSIFY_MAX_CHARS > 0
+                and len(input_text) > self.settings.CLASSIFY_MAX_CHARS
+            ):
+                input_text = input_text[: self.settings.CLASSIFY_MAX_CHARS]
+                truncation_notes.append(
+                    _max_char_truncation_note(self.settings.CLASSIFY_MAX_CHARS)
+                )
                 log.info(
                     "Truncated document content for classification",
                     doc_id=self.doc_id,
-                    max_pages=self.settings.CLASSIFY_MAX_PAGES,
-                    tail_pages=self.settings.CLASSIFY_TAIL_PAGES,
+                    max_chars=self.settings.CLASSIFY_MAX_CHARS,
                 )
 
-        if self.settings.CLASSIFY_MAX_CHARS > 0 and len(input_text) > self.settings.CLASSIFY_MAX_CHARS:
-            input_text = input_text[: self.settings.CLASSIFY_MAX_CHARS]
-            truncation_notes.append(
-                _max_char_truncation_note(self.settings.CLASSIFY_MAX_CHARS)
+            result, model = self.classifier.classify_text(
+                input_text,
+                self.taxonomy_cache.correspondent_names(),
+                self.taxonomy_cache.document_type_names(),
+                self.taxonomy_cache.tag_names(),
+                truncation_note="\n".join(truncation_notes) if truncation_notes else None,
             )
-            log.info(
-                "Truncated document content for classification",
-                doc_id=self.doc_id,
-                max_chars=self.settings.CLASSIFY_MAX_CHARS,
-            )
+            if not result or _is_empty_classification(result):
+                log.warning("Classification failed", doc_id=self.doc_id)
+                self._finalize_with_error(current_tags)
+                return
+            if _is_generic_document_type(result.document_type):
+                log.warning(
+                    "Classification returned generic document type",
+                    doc_id=self.doc_id,
+                    document_type=result.document_type,
+                )
+                self._finalize_with_error(current_tags)
+                return
 
-        result, model = self.classifier.classify_text(
-            input_text,
-            self.taxonomy_cache.correspondent_names(),
-            self.taxonomy_cache.document_type_names(),
-            self.taxonomy_cache.tag_names(),
-            truncation_note="\n".join(truncation_notes) if truncation_notes else None,
-        )
-        if not result or _is_empty_classification(result):
-            log.warning("Classification failed", doc_id=self.doc_id)
-            self._finalize_with_error(current_tags)
-            return
-        if _is_generic_document_type(result.document_type):
-            log.warning(
-                "Classification returned generic document type",
-                doc_id=self.doc_id,
-                document_type=result.document_type,
-            )
-            self._finalize_with_error(current_tags)
-            return
-
-        self._apply_classification(document, content, result, model)
+            self._apply_classification(document, content, result, model)
+        finally:
+            if claimed:
+                self._release_processing_tag()
+            self._log_classification_stats()
 
     def _clean_processing_tags(self, tags: set[int]) -> set[int]:
         """Remove OCR/classification processing tags and error tags."""
@@ -726,11 +739,78 @@ class ClassificationProcessor:
         updated.discard(self.settings.PRE_TAG_ID)
         updated.discard(self.settings.POST_TAG_ID)
         updated.discard(self.settings.CLASSIFY_PRE_TAG_ID)
+        if self.settings.CLASSIFY_PROCESSING_TAG_ID:
+            updated.discard(self.settings.CLASSIFY_PROCESSING_TAG_ID)
         if self.settings.CLASSIFY_POST_TAG_ID:
             updated.discard(self.settings.CLASSIFY_POST_TAG_ID)
         if self.settings.ERROR_TAG_ID:
             updated.discard(self.settings.ERROR_TAG_ID)
         return updated
+
+    def _claim_processing_tag(self, tags: set[int]) -> bool:
+        """Add the classification processing tag if configured; return True if claimed."""
+        tag_id = self.settings.CLASSIFY_PROCESSING_TAG_ID
+        if not tag_id:
+            return True
+        if tag_id in tags:
+            log.info(
+                "Document already claimed for classification",
+                doc_id=self.doc_id,
+                processing_tag_id=tag_id,
+            )
+            return False
+        updated = set(tags)
+        updated.add(tag_id)
+        try:
+            self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
+        except Exception:
+            log.exception(
+                "Failed to claim classification processing tag",
+                doc_id=self.doc_id,
+                processing_tag_id=tag_id,
+            )
+            return False
+        log.info(
+            "Claimed document for classification",
+            doc_id=self.doc_id,
+            processing_tag_id=tag_id,
+        )
+        return True
+
+    def _release_processing_tag(self) -> None:
+        """Remove the classification processing tag if it is still present."""
+        tag_id = self.settings.CLASSIFY_PROCESSING_TAG_ID
+        if not tag_id:
+            return
+        try:
+            latest = self.paperless_client.get_document(self.doc_id)
+        except Exception:
+            log.exception(
+                "Failed to refresh document before releasing classification tag",
+                doc_id=self.doc_id,
+            )
+            return
+        tags = set(latest.get("tags", []) or [])
+        if tag_id not in tags:
+            return
+        tags.discard(tag_id)
+        try:
+            self.paperless_client.update_document_metadata(self.doc_id, tags=list(tags))
+        except Exception:
+            log.exception(
+                "Failed to release classification processing tag",
+                doc_id=self.doc_id,
+                processing_tag_id=tag_id,
+            )
+
+    def _log_classification_stats(self) -> None:
+        """Log classification model stats if the provider exposes them."""
+        if not hasattr(self.classifier, "get_stats"):
+            return
+        stats = self.classifier.get_stats()
+        if not stats or not stats.get("attempts"):
+            return
+        log.info("Classification stats", doc_id=self.doc_id, **stats)
 
     def _update_tags(self, tags: set[int]) -> None:
         """Persist tag changes without touching other metadata."""

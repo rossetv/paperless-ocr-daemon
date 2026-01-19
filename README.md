@@ -68,10 +68,10 @@ All configuration is via environment variables.
 | `LLM_PROVIDER` | AI provider: `openai` or `ollama`. | `openai` | No |
 | `OPENAI_API_KEY` | OpenAI API key. | - | Yes (if `LLM_PROVIDER=openai`) |
 | `OLLAMA_BASE_URL` | Ollama API base URL. | `http://localhost:11434/v1/` | Yes (if `LLM_PROVIDER=ollama`) |
-| `PRIMARY_MODEL` | OCR model. | `gpt-5-mini` / `gemma3:27b` | No |
-| `FALLBACK_MODEL` | OCR fallback model. | `o4-mini` / `gemma3:12b` | No |
+| `AI_MODELS` | Comma-separated model list used for OCR + classification. | `gpt-5-mini,gpt-5.2,o4-mini` / `gemma3:27b,gemma3:12b` | No |
 | `PRE_TAG_ID` | Tag ID for documents to OCR. | `443` | No |
 | `POST_TAG_ID` | Tag ID to apply after OCR. | `444` | No |
+| `OCR_PROCESSING_TAG_ID` | Optional tag ID used as an OCR in-progress lock. | - | No |
 | `POLL_INTERVAL` | Seconds between polls. | `15` | No |
 | `MAX_RETRIES` | Max retries for network/model calls. | `20` | No |
 | `MAX_RETRY_BACKOFF_SECONDS` | Max seconds to sleep between retries. | `30` | No |
@@ -84,13 +84,13 @@ All configuration is via environment variables.
 | `LOG_FORMAT` | `console` or `json`. | `console` | No |
 | `CLASSIFY_PRE_TAG_ID` | Tag ID for documents to classify. | `POST_TAG_ID` | No |
 | `CLASSIFY_POST_TAG_ID` | Optional tag ID to apply after classification. | - | No |
+| `CLASSIFY_PROCESSING_TAG_ID` | Optional tag ID used as a classification in-progress lock. | - | No |
 | `ERROR_TAG_ID` | Tag ID for OCR/classification error marker. | `552` | No |
-| `CLASSIFY_MODEL` | Model for classification. | `PRIMARY_MODEL` | No |
-| `CLASSIFY_FALLBACK_MODEL` | Fallback model for classification. | `FALLBACK_MODEL` | No |
 | `CLASSIFY_PERSON_FIELD_ID` | Paperless custom field ID for "Person". | - | No |
 | `CLASSIFY_DEFAULT_COUNTRY_TAG` | Country tag to always add. | - | No |
 | `CLASSIFY_MAX_CHARS` | Max OCR characters to send to classifier (0 = no limit). | `0` | No |
 | `CLASSIFY_TAG_LIMIT` | Max number of non-required tags to keep after enrichment. | `5` | No |
+| `CLASSIFY_TAXONOMY_LIMIT` | Max correspondents/types/tags passed into the prompt. | `100` | No |
 | `CLASSIFY_MAX_PAGES` | Max OCR pages to send to classifier (0 = no limit). | `3` | No |
 | `CLASSIFY_TAIL_PAGES` | Extra OCR pages from the end to include when truncating. | `2` | No |
 | `CLASSIFY_HEADERLESS_CHAR_LIMIT` | Char limit used when OCR page headers are missing. | `15000` | No |
@@ -105,15 +105,17 @@ Notes:
 - A footer lists the models used for transcription.
 - Blank pages are skipped.
 - If all models fail or refuse, a refusal marker is inserted.
+- If `OCR_PROCESSING_TAG_ID` is set, the tag is added while OCR runs and removed when finished.
 
 ## Classification behavior
 
 - If OCR content is empty, the classifier removes the OCR tag and re-adds the inbox tag so OCR runs again.
-- Classification relies on `MAX_RETRIES` in the API client; if both models fail or return empty output, the document is marked with `ERROR_TAG_ID` and pipeline tags are removed.
+- Classification relies on `MAX_RETRIES` in the API client; if all models fail or return empty output, the document is marked with `ERROR_TAG_ID` and pipeline tags are removed.
 - If a document already has `ERROR_TAG_ID`, classification is skipped and pipeline tags are removed.
 - Page truncation uses the first `CLASSIFY_MAX_PAGES` pages plus the last `CLASSIFY_TAIL_PAGES` pages. If no page headers are present, it falls back to `CLASSIFY_HEADERLESS_CHAR_LIMIT`.
 - Required tags (year, country, model markers, error markers) are always included and do not count toward `CLASSIFY_TAG_LIMIT`.
-- The prompt includes up to 100 correspondents, document types, and tags, sorted by usage.
+- The prompt includes up to `CLASSIFY_TAXONOMY_LIMIT` correspondents, document types, and tags, sorted by usage.
+- If `CLASSIFY_PROCESSING_TAG_ID` is set, the tag is added while classification runs and removed when finished.
 
 ## Architecture
 

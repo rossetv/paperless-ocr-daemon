@@ -72,9 +72,22 @@ class OcrProvider(ABC):
 class OpenAIProvider(OpenAIChatMixin, OcrProvider):
     """An OCR provider that uses the OpenAI and Ollama APIs."""
 
+    def __init__(self, settings: Settings):
+        super().__init__(settings)
+        self._stats = {
+            "attempts": 0,
+            "refusals": 0,
+            "api_errors": 0,
+            "fallback_successes": 0,
+        }
+
+    def get_stats(self) -> dict:
+        """Return a snapshot of OCR model stats for this provider instance."""
+        return dict(self._stats)
+
     def transcribe_image(self, image: Image.Image) -> tuple[str, str]:
         """
-        Transcribe an image using a primary and fallback model.
+        Transcribe an image using a configured chain of models.
         """
         if is_blank(image):
             return "", ""  # Skip empty pages
@@ -101,8 +114,15 @@ class OpenAIProvider(OpenAIChatMixin, OcrProvider):
             },
         ]
 
-        models_to_try = [self.settings.PRIMARY_MODEL, self.settings.FALLBACK_MODEL]
+        seen = set()
+        models_to_try = []
+        for candidate in self.settings.AI_MODELS:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            models_to_try.append(candidate)
 
+        primary_model = models_to_try[0] if models_to_try else ""
         for model in models_to_try:
             params = {
                 "model": model,
@@ -110,19 +130,25 @@ class OpenAIProvider(OpenAIChatMixin, OcrProvider):
                 "timeout": self.settings.REQUEST_TIMEOUT,
             }
             try:
+                self._stats["attempts"] += 1
                 response = self._create_completion(**params)
                 text = response.choices[0].message.content.strip()
 
                 if not _is_refusal(text):
+                    if model != primary_model:
+                        log.info("Fallback model succeeded", model=model)
+                        self._stats["fallback_successes"] += 1
                     return text, model  # Success
                 else:
                     log.warning("Model refused to transcribe", model=model)
+                    self._stats["refusals"] += 1
             except openai.APIError as e:
                 log.warning(
                     "API call for model failed after all retries", model=model, error=e
                 )
+                self._stats["api_errors"] += 1
                 # Continue to the next model in the loop
                 continue
 
-        log.error("Both models failed or refused to transcribe the page")
+        log.error("All models failed or refused to transcribe the page")
         return self.settings.REFUSAL_MARK, ""  # All models failed

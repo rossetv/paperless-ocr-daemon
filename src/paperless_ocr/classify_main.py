@@ -37,12 +37,13 @@ def main() -> None:
         poll_interval=settings.POLL_INTERVAL,
         document_workers=settings.DOCUMENT_WORKERS,
         llm_provider=settings.LLM_PROVIDER,
-        classify_model=settings.CLASSIFY_MODEL,
+        ai_models=settings.AI_MODELS,
+        classify_processing_tag_id=settings.CLASSIFY_PROCESSING_TAG_ID,
     )
 
     list_client = PaperlessClient(settings)
     taxonomy_client = PaperlessClient(settings)
-    taxonomy_cache = TaxonomyCache(taxonomy_client)
+    taxonomy_cache = TaxonomyCache(taxonomy_client, settings.CLASSIFY_TAXONOMY_LIMIT)
 
     was_idle = False
     try:

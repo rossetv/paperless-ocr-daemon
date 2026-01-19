@@ -22,13 +22,16 @@ def test_settings_default_values(mocker):
 
     assert settings.PAPERLESS_URL == "http://paperless:8000"
     assert settings.LLM_PROVIDER == "openai"
-    assert settings.PRIMARY_MODEL == "gpt-5-mini"
+    assert settings.AI_MODELS == ["gpt-5-mini", "gpt-5.2", "o4-mini"]
+    assert settings.OCR_PROCESSING_TAG_ID is None
     assert settings.POLL_INTERVAL == 15
     assert settings.MAX_RETRY_BACKOFF_SECONDS == 30
     assert settings.OCR_DPI == 300
     assert settings.CLASSIFY_PRE_TAG_ID == settings.POST_TAG_ID
     assert settings.CLASSIFY_POST_TAG_ID is None
+    assert settings.CLASSIFY_PROCESSING_TAG_ID is None
     assert settings.CLASSIFY_TAG_LIMIT == 5
+    assert settings.CLASSIFY_TAXONOMY_LIMIT == 100
     assert settings.CLASSIFY_MAX_PAGES == 3
     assert settings.CLASSIFY_TAIL_PAGES == 2
     assert settings.CLASSIFY_HEADERLESS_CHAR_LIMIT == 15000
@@ -47,15 +50,18 @@ def test_settings_from_environment_variables(mocker):
             "OPENAI_API_KEY": "env_api_key",
             "LLM_PROVIDER": "ollama",
             "OLLAMA_BASE_URL": "http://ollama:11434/v1",
-            "PRIMARY_MODEL": "test-primary-model",
             "PRE_TAG_ID": "101",
+            "OCR_PROCESSING_TAG_ID": "333",
             "POLL_INTERVAL": "30",
+            "AI_MODELS": "model-a, model-b , model-c",
             "MAX_RETRY_BACKOFF_SECONDS": "12",
             "CLASSIFY_PRE_TAG_ID": "555",
             "CLASSIFY_POST_TAG_ID": "556",
+            "CLASSIFY_PROCESSING_TAG_ID": "777",
             "CLASSIFY_DEFAULT_COUNTRY_TAG": "Ireland",
             "CLASSIFY_MAX_PAGES": "2",
             "CLASSIFY_TAIL_PAGES": "3",
+            "CLASSIFY_TAXONOMY_LIMIT": "45",
             "ERROR_TAG_ID": "999",
             "CLASSIFY_HEADERLESS_CHAR_LIMIT": "1200",
         },
@@ -68,15 +74,18 @@ def test_settings_from_environment_variables(mocker):
     assert settings.PAPERLESS_TOKEN == "env_token"
     assert settings.LLM_PROVIDER == "ollama"
     assert settings.OLLAMA_BASE_URL == "http://ollama:11434/v1"
-    assert settings.PRIMARY_MODEL == "test-primary-model"
+    assert settings.AI_MODELS == ["model-a", "model-b", "model-c"]
     assert settings.PRE_TAG_ID == 101
+    assert settings.OCR_PROCESSING_TAG_ID == 333
     assert settings.POLL_INTERVAL == 30
     assert settings.MAX_RETRY_BACKOFF_SECONDS == 12
     assert settings.CLASSIFY_PRE_TAG_ID == 555
     assert settings.CLASSIFY_POST_TAG_ID == 556
+    assert settings.CLASSIFY_PROCESSING_TAG_ID == 777
     assert settings.CLASSIFY_DEFAULT_COUNTRY_TAG == "Ireland"
     assert settings.CLASSIFY_MAX_PAGES == 2
     assert settings.CLASSIFY_TAIL_PAGES == 3
+    assert settings.CLASSIFY_TAXONOMY_LIMIT == 45
     assert settings.CLASSIFY_HEADERLESS_CHAR_LIMIT == 1200
     assert settings.ERROR_TAG_ID == 999
 
@@ -120,7 +129,7 @@ def test_ollama_configuration(mocker):
     import openai
 
     assert settings.LLM_PROVIDER == "ollama"
-    assert settings.PRIMARY_MODEL == "gemma3:27b"
+    assert settings.AI_MODELS == ["gemma3:27b", "gemma3:12b"]
     assert openai.base_url == "http://localhost:11434/v1/"
     assert openai.api_key == "dummy"
 

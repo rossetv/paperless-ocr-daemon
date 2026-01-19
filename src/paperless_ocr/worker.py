@@ -59,35 +59,47 @@ class DocumentProcessor:
         """
         log.info("Processing document", doc_id=self.doc_id, title=self.title)
         start_time = dt.datetime.now()
+        claimed = False
+        try:
+            latest = self._refresh_document()
+            if latest is None:
+                return
+            current_tags = set(latest.get("tags", []) or [])
 
-        if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in self.doc.get(
-            "tags", []
-        ):
-            log.warning(
-                "Document has error tag; skipping OCR",
-                doc_id=self.doc_id,
-            )
-            self._set_error_only_tags()
-            return
+            if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in current_tags:
+                log.warning(
+                    "Document has error tag; skipping OCR",
+                    doc_id=self.doc_id,
+                )
+                self._set_error_only_tags()
+                return
 
-        content, content_type = self.paperless_client.download_content(self.doc_id)
-        extension = ".pdf" if "pdf" in content_type else ".bin"
+            claimed = self._claim_processing_tag(current_tags)
+            if not claimed:
+                return
 
-        with tempfile.NamedTemporaryFile(delete=True, suffix=extension) as temp_file:
-            temp_file.write(content)
-            temp_file.flush()  # Ensure content is written to disk
+            content, content_type = self.paperless_client.download_content(self.doc_id)
+            extension = ".pdf" if "pdf" in content_type else ".bin"
 
-            images = self._file_to_images(temp_file.name, content_type)
+            with tempfile.NamedTemporaryFile(delete=True, suffix=extension) as temp_file:
+                temp_file.write(content)
+                temp_file.flush()  # Ensure content is written to disk
 
-        if not images:
-            log.warning("Document has no pages to process", doc_id=self.doc_id)
-            return
+                images = self._file_to_images(temp_file.name, content_type)
 
-        page_results = self._ocr_pages_in_parallel(images)
+            if not images:
+                log.warning("Document has no pages to process", doc_id=self.doc_id)
+                return
 
-        full_text, models_used = self._assemble_full_text(images, page_results)
+            page_results = self._ocr_pages_in_parallel(images)
 
-        self._update_paperless_document(full_text, models_used)
+            full_text, models_used = self._assemble_full_text(images, page_results)
+
+            self._update_paperless_document(full_text, models_used)
+        finally:
+            if claimed:
+                self._release_processing_tag()
+            self._log_ocr_stats()
 
         elapsed_time = (dt.datetime.now() - start_time).total_seconds()
         log.info(
@@ -95,6 +107,82 @@ class DocumentProcessor:
             doc_id=self.doc_id,
             elapsed_time=f"{elapsed_time:.2f}s",
         )
+
+    def _refresh_document(self) -> dict | None:
+        """Refresh the document from Paperless and update the local cache."""
+        try:
+            latest = self.paperless_client.get_document(self.doc_id)
+        except Exception:
+            log.exception("Failed to refresh document metadata", doc_id=self.doc_id)
+            return None
+        self.doc = latest
+        return latest
+
+    def _claim_processing_tag(self, current_tags: set[int]) -> bool:
+        """Add the OCR processing tag if configured; return True if claimed."""
+        tag_id = self.settings.OCR_PROCESSING_TAG_ID
+        if not tag_id:
+            return True
+        if tag_id in current_tags:
+            log.info(
+                "Document already claimed for OCR",
+                doc_id=self.doc_id,
+                processing_tag_id=tag_id,
+            )
+            return False
+        updated_tags = set(current_tags)
+        updated_tags.add(tag_id)
+        try:
+            self.paperless_client.update_document_metadata(
+                self.doc_id, tags=list(updated_tags)
+            )
+        except Exception:
+            log.exception(
+                "Failed to claim OCR processing tag",
+                doc_id=self.doc_id,
+                processing_tag_id=tag_id,
+            )
+            return False
+        log.info(
+            "Claimed document for OCR",
+            doc_id=self.doc_id,
+            processing_tag_id=tag_id,
+        )
+        return True
+
+    def _release_processing_tag(self) -> None:
+        """Remove the OCR processing tag if it is still present."""
+        tag_id = self.settings.OCR_PROCESSING_TAG_ID
+        if not tag_id:
+            return
+        try:
+            latest = self.paperless_client.get_document(self.doc_id)
+        except Exception:
+            log.exception(
+                "Failed to refresh document before releasing OCR tag", doc_id=self.doc_id
+            )
+            return
+        tags = set(latest.get("tags", []) or [])
+        if tag_id not in tags:
+            return
+        tags.discard(tag_id)
+        try:
+            self.paperless_client.update_document_metadata(self.doc_id, tags=list(tags))
+        except Exception:
+            log.exception(
+                "Failed to release OCR processing tag",
+                doc_id=self.doc_id,
+                processing_tag_id=tag_id,
+            )
+
+    def _log_ocr_stats(self) -> None:
+        """Log OCR model stats if the provider exposes them."""
+        if not hasattr(self.ocr_provider, "get_stats"):
+            return
+        stats = self.ocr_provider.get_stats()
+        if not stats or not stats.get("attempts"):
+            return
+        log.info("OCR stats", doc_id=self.doc_id, **stats)
 
     def _file_to_images(self, path: str, content_type: str) -> list[Image.Image]:
         """Convert the downloaded file to a list of PIL.Image instances."""
@@ -185,6 +273,8 @@ class DocumentProcessor:
                 doc_id=self.doc_id,
             )
         current_tags.discard(self.settings.PRE_TAG_ID)
+        if self.settings.OCR_PROCESSING_TAG_ID:
+            current_tags.discard(self.settings.OCR_PROCESSING_TAG_ID)
         current_tags.add(self.settings.POST_TAG_ID)
 
         self.paperless_client.update_document(

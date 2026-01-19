@@ -28,8 +28,7 @@ def settings(mocker):
         {
             "PAPERLESS_TOKEN": "test_token",
             "OPENAI_API_KEY": "test_api_key",
-            "CLASSIFY_MODEL": "classify-primary",
-            "CLASSIFY_FALLBACK_MODEL": "classify-fallback",
+            "AI_MODELS": "classify-primary,classify-fallback",
         },
         clear=True,
     )
@@ -93,8 +92,7 @@ def test_classify_text_fallback_on_invalid_json(settings, mocker):
 
 
 def test_classify_text_omits_temperature_for_gpt5(settings, mocker):
-    settings.CLASSIFY_MODEL = "gpt-5-mini"
-    settings.CLASSIFY_FALLBACK_MODEL = "classify-fallback"
+    settings.AI_MODELS = ["gpt-5-mini", "classify-fallback"]
     provider = ClassificationProvider(settings)
     mock_create = mocker.patch(
         "paperless_ocr.classifier.ClassificationProvider._create_completion"

@@ -145,6 +145,33 @@ Do not include any additional keys. If a value is unknown, return an empty
 string ("") or empty array ([]).
 """.strip()
 
+CLASSIFICATION_JSON_SCHEMA = {
+    "name": "paperless_document_classification",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "title": {"type": "string"},
+            "correspondent": {"type": "string"},
+            "tags": {"type": "array", "items": {"type": "string"}},
+            "document_date": {"type": "string"},
+            "document_type": {"type": "string"},
+            "language": {"type": "string"},
+            "person": {"type": "string"},
+        },
+        "required": [
+            "title",
+            "correspondent",
+            "tags",
+            "document_date",
+            "document_type",
+            "language",
+            "person",
+        ],
+    },
+    "strict": True,
+}
+
 
 @dataclass(frozen=True)
 class ClassificationResult:
@@ -213,6 +240,22 @@ class ClassificationProvider(OpenAIChatMixin):
 
     def __init__(self, settings: Settings):
         self.settings = settings
+        self._stats = {}
+
+    def _reset_stats(self) -> None:
+        """Reset per-call classification counters."""
+        self._stats = {
+            "attempts": 0,
+            "api_errors": 0,
+            "invalid_json": 0,
+            "fallback_successes": 0,
+            "temperature_retries": 0,
+            "response_format_retries": 0,
+        }
+
+    def get_stats(self) -> dict:
+        """Return a snapshot of classification stats for this provider instance."""
+        return dict(self._stats)
 
     def _supports_temperature(self, model: str) -> bool:
         """Return True if the model is known to support a temperature parameter."""
@@ -222,6 +265,52 @@ class ClassificationProvider(OpenAIChatMixin):
         """Return True if the error indicates an unsupported temperature parameter."""
         message = str(error).lower()
         return "temperature" in message and "unsupported" in message
+
+    def _is_response_format_error(self, error: openai.BadRequestError) -> bool:
+        """Return True if the error indicates an unsupported response format."""
+        message = str(error).lower()
+        return "response_format" in message or "json_schema" in message
+
+    def _response_format(self) -> dict | None:
+        """Return a response_format payload when supported by the provider."""
+        if self.settings.LLM_PROVIDER != "openai":
+            return None
+        return {"type": "json_schema", "json_schema": CLASSIFICATION_JSON_SCHEMA}
+
+    def _create_with_compat(self, params: dict, model: str) -> openai.ChatCompletion | None:
+        """
+        Create a completion while tolerating unsupported parameters.
+        """
+        while True:
+            try:
+                self._stats["attempts"] += 1
+                return self._create_completion(**params)
+            except openai.BadRequestError as e:
+                if self._is_temperature_error(e) and "temperature" in params:
+                    log.warning(
+                        "Model does not support temperature; retrying with defaults",
+                        model=model,
+                    )
+                    self._stats["temperature_retries"] += 1
+                    params = dict(params)
+                    params.pop("temperature", None)
+                    continue
+                if self._is_response_format_error(e) and "response_format" in params:
+                    log.warning(
+                        "Model does not support response_format; retrying without it",
+                        model=model,
+                    )
+                    self._stats["response_format_retries"] += 1
+                    params = dict(params)
+                    params.pop("response_format", None)
+                    continue
+                log.warning("Classification request rejected", model=model, error=e)
+                self._stats["api_errors"] += 1
+                return None
+            except openai.APIError as e:
+                log.warning("Classification model failed", model=model, error=e)
+                self._stats["api_errors"] += 1
+                return None
 
     def classify_text(
         self,
@@ -237,6 +326,7 @@ class ClassificationProvider(OpenAIChatMixin):
         if not text.strip():
             log.warning("Document content is empty; skipping classification.")
             return None, ""
+        self._reset_stats()
 
         user_content = ""
         if truncation_note:
@@ -257,7 +347,14 @@ class ClassificationProvider(OpenAIChatMixin):
             {"role": "user", "content": user_content},
         ]
 
-        models_to_try = [self.settings.CLASSIFY_MODEL, self.settings.CLASSIFY_FALLBACK_MODEL]
+        seen = set()
+        models_to_try = []
+        for candidate in self.settings.AI_MODELS:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            models_to_try.append(candidate)
+        primary_model = models_to_try[0] if models_to_try else ""
 
         for model in models_to_try:
             temperature = (
@@ -270,36 +367,18 @@ class ClassificationProvider(OpenAIChatMixin):
             }
             if temperature is not None:
                 params["temperature"] = temperature
-            try:
-                response = self._create_completion(**params)
-            except openai.BadRequestError as e:
-                if temperature is None or not self._is_temperature_error(e):
-                    log.warning("Classification request rejected", model=model, error=e)
-                    continue
-                log.warning(
-                    "Model does not support temperature; retrying with default settings",
-                    model=model,
-                )
-                params.pop("temperature", None)
-                try:
-                    response = self._create_completion(**params)
-                except openai.BadRequestError as retry_error:
-                    log.warning(
-                        "Classification request rejected",
-                        model=model,
-                        error=retry_error,
-                    )
-                    continue
-                except openai.APIError as retry_error:
-                    log.warning("Classification model failed", model=model, error=retry_error)
-                    continue
-            except openai.APIError as e:
-                log.warning("Classification model failed", model=model, error=e)
+            response_format = self._response_format()
+            if response_format is not None:
+                params["response_format"] = response_format
+            response = self._create_with_compat(params, model)
+            if response is None:
                 continue
 
             try:
                 content = response.choices[0].message.content or ""
                 result = parse_classification_response(content)
+                if model != primary_model:
+                    self._stats["fallback_successes"] += 1
                 return result, model
             except (json.JSONDecodeError, ValueError) as e:
                 log.warning(
@@ -307,6 +386,7 @@ class ClassificationProvider(OpenAIChatMixin):
                     model=model,
                     error=str(e),
                 )
+                self._stats["invalid_json"] += 1
                 continue
 
         log.error("All classification models failed")

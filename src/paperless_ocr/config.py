@@ -34,16 +34,17 @@ class Settings:
     OPENAI_API_KEY: str | None
 
     # --- Model Selection ---
-    PRIMARY_MODEL: str
-    FALLBACK_MODEL: str
+    AI_MODELS: list[str]
 
     # --- Paperless-ngx Tag IDs ---
     PRE_TAG_ID: int
     POST_TAG_ID: int
+    OCR_PROCESSING_TAG_ID: int | None
 
     # --- Classification Tag IDs ---
     CLASSIFY_PRE_TAG_ID: int
     CLASSIFY_POST_TAG_ID: int | None
+    CLASSIFY_PROCESSING_TAG_ID: int | None
     ERROR_TAG_ID: int | None
 
     # --- Daemon Configuration ---
@@ -66,12 +67,11 @@ class Settings:
     REFUSAL_MARK: str = "CHATGPT REFUSED TO TRANSCRIBE"
 
     # --- Classification Configuration ---
-    CLASSIFY_MODEL: str
-    CLASSIFY_FALLBACK_MODEL: str
     CLASSIFY_PERSON_FIELD_ID: int | None
     CLASSIFY_DEFAULT_COUNTRY_TAG: str
     CLASSIFY_MAX_CHARS: int
     CLASSIFY_TAG_LIMIT: int
+    CLASSIFY_TAXONOMY_LIMIT: int
     CLASSIFY_MAX_PAGES: int
     CLASSIFY_TAIL_PAGES: int
     CLASSIFY_HEADERLESS_CHAR_LIMIT: int
@@ -95,17 +95,24 @@ class Settings:
         if self.LLM_PROVIDER == "ollama":
             self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1/")
             self.OPENAI_API_KEY = None  # Not used for Ollama
-            self.PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gemma3:27b")
-            self.FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "gemma3:12b")
+            default_ai_models = ["gemma3:27b", "gemma3:12b"]
         else:  # openai
             self.OLLAMA_BASE_URL = None
             self.OPENAI_API_KEY = self._get_required_env("OPENAI_API_KEY")
-            self.PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gpt-5-mini")
-            self.FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "o4-mini")
+            default_ai_models = ["gpt-5-mini", "gpt-5.2", "o4-mini"]
+        self.AI_MODELS = self._get_model_list(
+            "AI_MODELS",
+            default_ai_models,
+        )
 
         # --- Paperless-ngx Tag IDs ---
         self.PRE_TAG_ID = int(os.getenv("PRE_TAG_ID", "443"))
         self.POST_TAG_ID = int(os.getenv("POST_TAG_ID", "444"))
+        self.OCR_PROCESSING_TAG_ID = self._get_optional_int_env(
+            "OCR_PROCESSING_TAG_ID"
+        )
+        if self.OCR_PROCESSING_TAG_ID is not None and self.OCR_PROCESSING_TAG_ID <= 0:
+            self.OCR_PROCESSING_TAG_ID = None
 
         # --- Classification Tag IDs ---
         self.CLASSIFY_PRE_TAG_ID = self._get_optional_int_env(
@@ -114,6 +121,14 @@ class Settings:
         self.CLASSIFY_POST_TAG_ID = self._get_optional_int_env("CLASSIFY_POST_TAG_ID")
         if self.CLASSIFY_POST_TAG_ID is not None and self.CLASSIFY_POST_TAG_ID <= 0:
             self.CLASSIFY_POST_TAG_ID = None
+        self.CLASSIFY_PROCESSING_TAG_ID = self._get_optional_int_env(
+            "CLASSIFY_PROCESSING_TAG_ID"
+        )
+        if (
+            self.CLASSIFY_PROCESSING_TAG_ID is not None
+            and self.CLASSIFY_PROCESSING_TAG_ID <= 0
+        ):
+            self.CLASSIFY_PROCESSING_TAG_ID = None
         self.ERROR_TAG_ID = self._get_optional_int_env("ERROR_TAG_ID", 552)
         if self.ERROR_TAG_ID is not None and self.ERROR_TAG_ID <= 0:
             self.ERROR_TAG_ID = None
@@ -144,10 +159,6 @@ class Settings:
         self.LOG_FORMAT = log_format
 
         # --- Classification Configuration ---
-        self.CLASSIFY_MODEL = os.getenv("CLASSIFY_MODEL", self.PRIMARY_MODEL)
-        self.CLASSIFY_FALLBACK_MODEL = os.getenv(
-            "CLASSIFY_FALLBACK_MODEL", self.FALLBACK_MODEL
-        )
         self.CLASSIFY_PERSON_FIELD_ID = self._get_optional_int_env(
             "CLASSIFY_PERSON_FIELD_ID"
         )
@@ -156,6 +167,9 @@ class Settings:
         ).strip()
         self.CLASSIFY_MAX_CHARS = int(os.getenv("CLASSIFY_MAX_CHARS", "0"))
         self.CLASSIFY_TAG_LIMIT = max(0, int(os.getenv("CLASSIFY_TAG_LIMIT", "5")))
+        self.CLASSIFY_TAXONOMY_LIMIT = max(
+            0, int(os.getenv("CLASSIFY_TAXONOMY_LIMIT", "100"))
+        )
         self.CLASSIFY_MAX_PAGES = max(0, int(os.getenv("CLASSIFY_MAX_PAGES", "3")))
         self.CLASSIFY_TAIL_PAGES = max(0, int(os.getenv("CLASSIFY_TAIL_PAGES", "2")))
         self.CLASSIFY_HEADERLESS_CHAR_LIMIT = max(
@@ -182,6 +196,20 @@ class Settings:
         if not value:
             return default
         return int(value)
+
+    def _get_model_list(self, var_name: str, default: list[str]) -> list[str]:
+        """
+        Get a list of models from a comma-separated env var, falling back to defaults.
+
+        The order is preserved and represents the fallback sequence.
+        """
+        value = os.getenv(var_name)
+        if value is None:
+            return [model for model in default if model]
+        parts = [part.strip() for part in value.split(",") if part.strip()]
+        if not parts:
+            raise ValueError(f"{var_name} must contain at least one model name.")
+        return parts
 
 
 def setup_libraries(settings: Settings) -> None:

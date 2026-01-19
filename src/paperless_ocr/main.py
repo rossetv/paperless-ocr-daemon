@@ -55,6 +55,8 @@ def main() -> None:
         page_workers=settings.PAGE_WORKERS,
         document_workers=settings.DOCUMENT_WORKERS,
         llm_provider=settings.LLM_PROVIDER,
+        ai_models=settings.AI_MODELS,
+        ocr_processing_tag_id=settings.OCR_PROCESSING_TAG_ID,
     )
 
     paperless_client = PaperlessClient(settings)

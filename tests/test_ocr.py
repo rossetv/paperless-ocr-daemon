@@ -15,8 +15,7 @@ def settings(mocker):
         {
             "PAPERLESS_TOKEN": "test_token",
             "OPENAI_API_KEY": "test_api_key",
-            "PRIMARY_MODEL": "gpt-primary",
-            "FALLBACK_MODEL": "gpt-fallback",
+            "AI_MODELS": "gpt-primary,gpt-middle,gpt-fallback",
         },
         clear=True,
     )
@@ -72,11 +71,12 @@ def test_transcribe_image_success(ocr_provider, mock_create_completion, mocker):
 
 
 def test_fallback_on_refusal(ocr_provider, mock_create_completion, mocker):
-    """Test that the provider falls back to the secondary model if the primary refuses."""
+    """Test that the provider falls back through the chain if the primary refuses."""
     image = create_test_image()
     refusal_text = "I can't assist with that."
     expected_text = "Fallback model success."
     mock_create_completion.side_effect = [
+        create_mock_response(mocker, refusal_text),
         create_mock_response(mocker, refusal_text),
         create_mock_response(mocker, expected_text),
     ]
@@ -85,13 +85,13 @@ def test_fallback_on_refusal(ocr_provider, mock_create_completion, mocker):
 
     assert text == expected_text
     assert model == "gpt-fallback"
-    assert mock_create_completion.call_count == 2
+    assert mock_create_completion.call_count == 3
 
 
 def test_fallback_on_api_error(ocr_provider, mock_create_completion, mocker):
-    """Test fallback to the secondary model if the primary fails with an APIError."""
+    """Test fallback to the middle model if the primary fails with an APIError."""
     image = create_test_image()
-    expected_text = "Fallback success."
+    expected_text = "Middle success."
     mock_create_completion.side_effect = [
         openai.APIError("Primary failed", request=None, body=None),
         create_mock_response(mocker, expected_text),
@@ -100,7 +100,7 @@ def test_fallback_on_api_error(ocr_provider, mock_create_completion, mocker):
     text, model = ocr_provider.transcribe_image(image)
 
     assert text == expected_text
-    assert model == "gpt-fallback"
+    assert model == "gpt-middle"
     assert mock_create_completion.call_count == 2
 
 
@@ -109,6 +109,7 @@ def test_all_models_fail(ocr_provider, settings, mock_create_completion, mocker)
     image = create_test_image()
     mock_create_completion.side_effect = [
         create_mock_response(mocker, "I can't assist."),  # Primary refuses
+        create_mock_response(mocker, "I can't assist."),  # Middle refuses
         openai.APIError("Fallback failed", request=None, body=None),  # Fallback errors
     ]
 
@@ -116,7 +117,7 @@ def test_all_models_fail(ocr_provider, settings, mock_create_completion, mocker)
 
     assert text == settings.REFUSAL_MARK
     assert model == ""
-    assert mock_create_completion.call_count == 2
+    assert mock_create_completion.call_count == 3
 
 
 def test_transcribe_blank_image(ocr_provider, mock_create_completion):
