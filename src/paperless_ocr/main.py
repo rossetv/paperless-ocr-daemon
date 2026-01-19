@@ -28,6 +28,21 @@ from .paperless import PaperlessClient
 from .worker import DocumentProcessor
 
 
+def _process_document(doc: dict, settings: Settings) -> None:
+    paperless = PaperlessClient(settings)
+    ocr_provider = OpenAIProvider(settings)
+    try:
+        processor = DocumentProcessor(
+            doc,
+            paperless,
+            ocr_provider,
+            settings,
+        )
+        processor.process()
+    finally:
+        paperless.close()
+
+
 def main() -> None:
     """
     The main loop of the daemon.
@@ -65,56 +80,39 @@ def main() -> None:
     while True:
         try:
             # Fetch all documents that have the pre-tag
-            all_docs = paperless_client.get_documents_to_process()
-
-            # Filter out documents that already have the post-tag
             docs_to_process = [
                 doc
-                for doc in all_docs
+                for doc in paperless_client.get_documents_to_process()
                 if settings.POST_TAG_ID not in doc.get("tags", [])
             ]
 
-            if docs_to_process:
-                was_idle = False  # Reset idle state
-                log.info(
-                    "Found documents to process",
-                    doc_count=len(docs_to_process),
-                    document_workers=settings.DOCUMENT_WORKERS,
-                )
-
-                def process_document(doc: dict) -> None:
-                    paperless = PaperlessClient(settings)
-                    ocr_provider = OpenAIProvider(settings)
-                    try:
-                        processor = DocumentProcessor(
-                            doc,
-                            paperless,
-                            ocr_provider,
-                            settings,
-                        )
-                        processor.process()
-                    finally:
-                        paperless.close()
-
-                with ThreadPoolExecutor(
-                    max_workers=settings.DOCUMENT_WORKERS
-                ) as executor:
-                    future_to_doc = {
-                        executor.submit(process_document, doc): doc
-                        for doc in docs_to_process
-                    }
-                    for future in as_completed(future_to_doc):
-                        doc = future_to_doc[future]
-                        try:
-                            future.result()
-                        except Exception:
-                            log.exception(
-                                "Failed to process document", doc_id=doc.get("id")
-                            )
-            else:
+            if not docs_to_process:
                 if not was_idle:
                     log.info("No documents to process. Waiting...")
-                    was_idle = True
+                was_idle = True
+                time.sleep(settings.POLL_INTERVAL)
+                continue
+
+            was_idle = False
+            log.info(
+                "Found documents to process",
+                doc_count=len(docs_to_process),
+                document_workers=settings.DOCUMENT_WORKERS,
+            )
+
+            with ThreadPoolExecutor(max_workers=settings.DOCUMENT_WORKERS) as executor:
+                future_to_doc = {
+                    executor.submit(_process_document, doc, settings): doc
+                    for doc in docs_to_process
+                }
+                for future in as_completed(future_to_doc):
+                    doc = future_to_doc[future]
+                    try:
+                        future.result()
+                    except Exception:
+                        log.exception(
+                            "Failed to process document", doc_id=doc.get("id")
+                        )
 
             time.sleep(settings.POLL_INTERVAL)
         except KeyboardInterrupt:

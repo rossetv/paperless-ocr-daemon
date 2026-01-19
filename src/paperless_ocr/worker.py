@@ -223,21 +223,19 @@ class DocumentProcessor:
         """
         Combine the OCR results from all pages into a single string.
         """
-        parts = []
+        sections = []
         models_used = set()
         for i, (text, model) in enumerate(page_results, 1):
             if text.strip():
-                header = f"\n--- Page {i} ---\n" if len(images) > 1 else ""
-                parts.append(header + text)
+                header = f"--- Page {i} ---\n" if len(images) > 1 else ""
+                sections.append(f"{header}{text}")
                 if model:
                     models_used.add(model)
 
-        footer = (
-            f"\n\nTranscribed by model: {', '.join(sorted(models_used))}"
-            if models_used
-            else ""
-        )
-        full_text = "\n".join(parts).strip() + footer
+        full_text = "\n\n".join(sections)
+        if models_used:
+            footer = f"Transcribed by model: {', '.join(sorted(models_used))}"
+            full_text = f"{full_text}\n\n{footer}" if full_text else footer
         return full_text, models_used
 
     def _update_paperless_document(self, full_text: str, models_used: set[str]) -> None:
@@ -256,22 +254,7 @@ class DocumentProcessor:
             )
             return
 
-        current_tags = set(self.doc.get("tags", []))
-        try:
-            latest = self.paperless_client.get_document(self.doc_id)
-            latest_tags = latest.get("tags", [])
-            if isinstance(latest_tags, list):
-                current_tags = set(latest_tags)
-            else:
-                log.warning(
-                    "Document tags were not a list; using cached tags",
-                    doc_id=self.doc_id,
-                )
-        except Exception:
-            log.exception(
-                "Failed to refresh document before updating tags; using cached tags",
-                doc_id=self.doc_id,
-            )
+        current_tags = self._get_latest_tags()
         current_tags.discard(self.settings.PRE_TAG_ID)
         if self.settings.OCR_PROCESSING_TAG_ID:
             current_tags.discard(self.settings.OCR_PROCESSING_TAG_ID)
@@ -286,6 +269,26 @@ class DocumentProcessor:
             removed_tag=self.settings.PRE_TAG_ID,
             added_tag=self.settings.POST_TAG_ID,
         )
+
+    def _get_latest_tags(self) -> set[int]:
+        """Return the latest document tags, falling back to cached tags."""
+        cached_tags = self.doc.get("tags", []) or []
+        try:
+            latest = self.paperless_client.get_document(self.doc_id)
+        except Exception:
+            log.exception(
+                "Failed to refresh document before updating tags; using cached tags",
+                doc_id=self.doc_id,
+            )
+            return set(cached_tags)
+        latest_tags = latest.get("tags", [])
+        if not isinstance(latest_tags, list):
+            log.warning(
+                "Document tags were not a list; using cached tags",
+                doc_id=self.doc_id,
+            )
+            return set(cached_tags)
+        return set(latest_tags)
 
     def _set_error_only_tags(self) -> None:
         """Replace all tags with the error tag."""
