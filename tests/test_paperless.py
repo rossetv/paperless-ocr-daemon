@@ -1,0 +1,307 @@
+import os
+
+import pytest
+import requests
+import requests_mock
+
+from paperless_ocr.config import Settings
+from paperless_ocr.paperless import PaperlessClient
+
+
+@pytest.fixture
+def settings(mocker):
+    """Fixture to create a Settings object for tests."""
+    mocker.patch.dict(
+        os.environ,
+        {
+            "PAPERLESS_TOKEN": "test_token",
+            "OPENAI_API_KEY": "test_api_key",
+            "PRE_TAG_ID": "10",
+            "POST_TAG_ID": "11",
+            "MAX_RETRIES": "3",
+        },
+        clear=True,
+    )
+    return Settings()
+
+
+@pytest.fixture
+def paperless_client(settings):
+    """Fixture to create a PaperlessClient instance."""
+    return PaperlessClient(settings)
+
+
+def test_get_documents_to_process(paperless_client, settings, requests_mock):
+    """
+    Test that the client correctly fetches all documents with the pre-OCR tag.
+    """
+    # Mock the paginated API response
+    # Page 1
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100",
+        json={
+            "next": f"{settings.PAPERLESS_URL}/api/documents/page2",
+            "results": [
+                {"id": 1, "tags": [10]},
+                {"id": 2, "tags": [10, 11]},
+            ],
+        },
+    )
+    # Page 2
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/page2",
+        json={
+            "next": None,
+            "results": [
+                {"id": 3, "tags": [10]},
+            ],
+        },
+    )
+
+    docs = list(paperless_client.get_documents_to_process())
+
+    assert len(docs) == 3
+    assert [d["id"] for d in docs] == [1, 2, 3]
+
+
+def test_download_content(paperless_client, settings, requests_mock):
+    """
+    Test that file content is correctly downloaded.
+    """
+    doc_id = 1
+    file_content = b"This is a test PDF."
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/download/",
+        content=file_content,
+        headers={"Content-Type": "application/pdf"},
+    )
+
+    content, content_type = paperless_client.download_content(doc_id)
+
+    assert content_type == "application/pdf"
+    assert content == file_content
+
+
+def test_download_content_defaults_content_type(paperless_client, settings, requests_mock):
+    """
+    Test that the content type defaults when not provided by the server.
+    """
+    doc_id = 2
+    file_content = b"binary data"
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/download/",
+        content=file_content,
+        headers={},
+    )
+
+    content, content_type = paperless_client.download_content(doc_id)
+
+    assert content_type == "application/pdf"
+    assert content == file_content
+
+
+def test_update_document(paperless_client, settings, requests_mock):
+    """
+    Test that a document is correctly updated with new content and tags.
+    """
+    doc_id = 1
+    new_content = "This is the OCR text."
+    new_tags = [11, 12]
+
+    # Mock the PATCH request and check the payload
+    mock_patch = requests_mock.patch(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/", status_code=200
+    )
+
+    paperless_client.update_document(doc_id, new_content, new_tags)
+
+    assert mock_patch.called
+    assert mock_patch.last_request.json() == {
+        "content": new_content,
+        "tags": new_tags,
+    }
+
+
+def test_get_document(paperless_client, settings, requests_mock):
+    """
+    Test that a single document can be fetched.
+    """
+    doc_id = 42
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/",
+        json={"id": doc_id, "content": "text"},
+    )
+
+    doc = paperless_client.get_document(doc_id)
+
+    assert doc["id"] == doc_id
+
+
+def test_list_tags(paperless_client, settings, requests_mock):
+    """
+    Test listing tags from Paperless.
+    """
+    requests_mock.get(
+        f"{settings.PAPERLESS_URL}/api/tags/?page_size=100",
+        json={"next": None, "results": [{"id": 1, "name": "Bills"}]},
+    )
+
+    tags = paperless_client.list_tags()
+
+    assert tags == [{"id": 1, "name": "Bills"}]
+
+
+def test_create_tag(paperless_client, settings, requests_mock):
+    """
+    Test creating a tag in Paperless.
+    """
+    mock_post = requests_mock.post(
+        f"{settings.PAPERLESS_URL}/api/tags/",
+        json={"id": 9, "name": "NewTag"},
+        status_code=201,
+    )
+
+    created = paperless_client.create_tag("NewTag")
+
+    assert created["id"] == 9
+    assert created["name"] == "NewTag"
+    assert mock_post.last_request.json() == {
+        "name": "NewTag",
+        "matching_algorithm": "none",
+    }
+
+
+def test_create_correspondent(paperless_client, settings, requests_mock):
+    """
+    Test creating a correspondent in Paperless.
+    """
+    mock_post = requests_mock.post(
+        f"{settings.PAPERLESS_URL}/api/correspondents/",
+        json={"id": 3, "name": "NewCorr"},
+        status_code=201,
+    )
+
+    created = paperless_client.create_correspondent("NewCorr")
+
+    assert created["id"] == 3
+    assert created["name"] == "NewCorr"
+    assert mock_post.last_request.json() == {
+        "name": "NewCorr",
+        "matching_algorithm": "none",
+    }
+
+
+def test_create_document_type(paperless_client, settings, requests_mock):
+    """
+    Test creating a document type in Paperless.
+    """
+    mock_post = requests_mock.post(
+        f"{settings.PAPERLESS_URL}/api/document_types/",
+        json={"id": 4, "name": "NewType"},
+        status_code=201,
+    )
+
+    created = paperless_client.create_document_type("NewType")
+
+    assert created["id"] == 4
+    assert created["name"] == "NewType"
+    assert mock_post.last_request.json() == {
+        "name": "NewType",
+        "matching_algorithm": "none",
+    }
+
+
+def test_update_document_metadata(paperless_client, settings, requests_mock):
+    """
+    Test metadata updates with a PATCH payload.
+    """
+    doc_id = 3
+    mock_patch = requests_mock.patch(
+        f"{settings.PAPERLESS_URL}/api/documents/{doc_id}/", status_code=200
+    )
+
+    paperless_client.update_document_metadata(
+        doc_id,
+        title="Title",
+        correspondent_id=1,
+        document_type_id=2,
+        document_date="2025-05-01",
+        tags=[1, 2],
+        language="en",
+        custom_fields=[{"field": 7, "value": "Person"}],
+    )
+
+    assert mock_patch.called
+    assert mock_patch.last_request.json() == {
+        "title": "Title",
+        "correspondent": 1,
+        "document_type": 2,
+        "created": "2025-05-01",
+        "tags": [1, 2],
+        "language": "en",
+        "custom_fields": [{"field": 7, "value": "Person"}],
+    }
+
+def test_retry_on_network_error(paperless_client, settings, requests_mock):
+    """
+    Test that the client retries on a transient network error.
+    """
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
+    requests_mock.get(
+        url,
+        [
+            {"exc": requests.exceptions.ConnectionError},
+            {"exc": requests.exceptions.Timeout},
+            {"json": {"next": None, "results": [{"id": 1, "tags": [10]}]}},
+        ],
+    )
+
+    # The call should succeed on the third attempt
+    docs = list(paperless_client.get_documents_to_process())
+    assert len(docs) == 1
+    assert requests_mock.call_count == 3
+
+
+def test_retry_fails_after_max_retries(paperless_client, settings, requests_mock):
+    """
+    Test that the client gives up after exhausting all retries.
+    """
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
+    requests_mock.get(url, exc=requests.exceptions.ConnectionError)
+
+    with pytest.raises(requests.exceptions.ConnectionError):
+        list(paperless_client.get_documents_to_process())
+
+    assert requests_mock.call_count == settings.MAX_RETRIES
+
+
+def test_retry_on_server_error(paperless_client, settings, requests_mock):
+    """
+    Test that 5xx responses trigger retries.
+    """
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
+    requests_mock.get(
+        url,
+        [
+            {"status_code": 502, "json": {"detail": "Bad Gateway"}},
+            {"json": {"next": None, "results": [{"id": 1, "tags": [10]}]}},
+        ],
+    )
+
+    docs = list(paperless_client.get_documents_to_process())
+
+    assert len(docs) == 1
+    assert requests_mock.call_count == 2
+
+
+def test_no_retry_on_client_error(paperless_client, settings, requests_mock):
+    """
+    Test that 4xx responses do not trigger retries.
+    """
+    url = f"{settings.PAPERLESS_URL}/api/documents/?tags__id=10&page_size=100"
+    requests_mock.get(url, status_code=404, json={"detail": "Not found"})
+
+    with pytest.raises(requests.exceptions.HTTPError):
+        list(paperless_client.get_documents_to_process())
+
+    assert requests_mock.call_count == 1
