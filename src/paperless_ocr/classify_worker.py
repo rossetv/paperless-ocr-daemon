@@ -15,10 +15,11 @@ from typing import Iterable
 
 import structlog
 
+from .claims import claim_processing_tag
 from .classifier import ClassificationProvider, ClassificationResult
 from .config import Settings
 from .paperless import PaperlessClient
-from .utils import contains_redacted_marker
+from .utils import is_error_content
 
 log = structlog.get_logger(__name__)
 
@@ -30,7 +31,7 @@ ERROR_PHRASES = [
     "i cannot help with transcrib",
 ]
 
-PAGE_HEADER_RE = re.compile(r"^--- Page \d+(?: \\([^)]+\\))? ---$", re.MULTILINE)
+PAGE_HEADER_RE = re.compile(r"^--- Page \d+(?: \([^)]+\))? ---$", re.MULTILINE)
 MODEL_FOOTER_RE = re.compile(r"transcribed by model:\s*(.+)", re.IGNORECASE)
 
 COMPANY_SUFFIXES = {
@@ -204,10 +205,7 @@ def _is_generic_document_type(value: str) -> bool:
 
 def _needs_error_tag(text: str) -> bool:
     """Return True if the OCR text contains refusal markers."""
-    text_lower = text.lower()
-    return contains_redacted_marker(text) or any(
-        phrase in text_lower for phrase in ERROR_PHRASES
-    )
+    return is_error_content(text, ERROR_PHRASES)
 
 
 def _extract_model_tags(text: str) -> list[str]:
@@ -366,13 +364,12 @@ def enrich_tags(
     Combine model-suggested tags with required tags.
     Required tags are always included and do not count toward tag_limit.
     """
-    text_lower = text.lower()
     tag_limit = max(0, tag_limit)
 
     base_tags = _dedupe_tags(tags)
     required_tags = []
 
-    if any(phrase in text_lower for phrase in ERROR_PHRASES):
+    if is_error_content(text, ERROR_PHRASES):
         required_tags.append("ERROR")
 
     required_tags.extend(_extract_model_tags(text))
@@ -670,7 +667,7 @@ class ClassificationProcessor:
                 self._finalize_with_error(current_tags)
                 return
 
-            claimed = self._claim_processing_tag(current_tags)
+            claimed = self._claim_processing_tag()
             if not claimed:
                 return
 
@@ -753,35 +750,14 @@ class ClassificationProcessor:
             updated.discard(self.settings.ERROR_TAG_ID)
         return updated
 
-    def _claim_processing_tag(self, tags: set[int]) -> bool:
-        """Add the classification processing tag if configured; return True if claimed."""
-        tag_id = self.settings.CLASSIFY_PROCESSING_TAG_ID
-        if not tag_id:
-            return True
-        if tag_id in tags:
-            log.info(
-                "Document already claimed for classification",
-                doc_id=self.doc_id,
-                processing_tag_id=tag_id,
-            )
-            return False
-        updated = set(tags)
-        updated.add(tag_id)
-        try:
-            self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
-        except Exception:
-            log.exception(
-                "Failed to claim classification processing tag",
-                doc_id=self.doc_id,
-                processing_tag_id=tag_id,
-            )
-            return False
-        log.info(
-            "Claimed document for classification",
+    def _claim_processing_tag(self) -> bool:
+        """Claim the classification processing tag with verification."""
+        return claim_processing_tag(
+            paperless_client=self.paperless_client,
             doc_id=self.doc_id,
-            processing_tag_id=tag_id,
+            tag_id=self.settings.CLASSIFY_PROCESSING_TAG_ID,
+            purpose="classification",
         )
-        return True
 
     def _release_processing_tag(self) -> None:
         """Remove the classification processing tag if it is still present."""

@@ -30,6 +30,13 @@ def test_enrich_tags_adds_required_tags():
     assert "ireland" in result
 
 
+def test_enrich_tags_adds_error_for_redacted_marker():
+    text = "Content [REDACTED NAME] with marker."
+    result = enrich_tags([], text, "2024-03-01", "", 8)
+
+    assert "error" in result
+
+
 def test_enrich_tags_trims_to_limit():
     text = "Transcribed by model: gpt-5"
     tags = ["Tag1", "Tag2", "Tag3", "Tag4", "Tag5", "Tag6", "Tag7", "Tag8"]
@@ -123,6 +130,26 @@ def test_truncate_content_by_pages_limits_pages_and_keeps_footer():
     assert "--- Page 1 ---" in result
     assert "--- Page 2 ---" in result
     assert "--- Page 3 ---" not in result
+    assert "Transcribed by model: gpt-5-mini" in result
+    assert note is not None
+
+
+def test_truncate_content_by_pages_handles_model_headers():
+    content = (
+        "--- Page 1 (gpt-5-mini) ---\n"
+        "Page1\n\n"
+        "--- Page 2 (gpt-5-mini) ---\n"
+        "Page2\n\n"
+        "--- Page 3 (gpt-5-mini) ---\n"
+        "Page3\n\n"
+        "\n\nTranscribed by model: gpt-5-mini"
+    )
+
+    result, note = truncate_content_by_pages(content, 2, 0, 1000)
+
+    assert "--- Page 1 (gpt-5-mini) ---" in result
+    assert "--- Page 2 (gpt-5-mini) ---" in result
+    assert "--- Page 3 (gpt-5-mini) ---" not in result
     assert "Transcribed by model: gpt-5-mini" in result
     assert note is not None
 

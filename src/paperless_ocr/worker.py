@@ -18,12 +18,12 @@ designed to be instantiated for each document that needs processing.
 import datetime as dt
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import IO, List
 
 import structlog
 from PIL import Image, ImageSequence, UnidentifiedImageError
 from pdf2image import convert_from_path
 
+from .claims import claim_processing_tag
 from .config import Settings
 from .ocr import OcrProvider
 from .paperless import PaperlessClient
@@ -75,7 +75,7 @@ class DocumentProcessor:
                 self._set_error_only_tags()
                 return
 
-            claimed = self._claim_processing_tag(current_tags)
+            claimed = self._claim_processing_tag()
             if not claimed:
                 return
 
@@ -126,6 +126,18 @@ class DocumentProcessor:
             elapsed_time=f"{elapsed_time:.2f}s",
         )
 
+    def _handle_page_failures(self) -> None:
+        """Apply the policy for partial OCR failures."""
+        if not self.settings.ERROR_TAG_ID:
+            return
+        current_tags = self._get_latest_tags()
+        current_tags.add(self.settings.ERROR_TAG_ID)
+        if self.settings.OCR_PROCESSING_TAG_ID:
+            current_tags.discard(self.settings.OCR_PROCESSING_TAG_ID)
+        self.paperless_client.update_document_metadata(
+            self.doc_id, tags=list(current_tags)
+        )
+
     def _refresh_document(self) -> dict | None:
         """Refresh the document from Paperless and update the local cache."""
         try:
@@ -136,37 +148,14 @@ class DocumentProcessor:
         self.doc = latest
         return latest
 
-    def _claim_processing_tag(self, current_tags: set[int]) -> bool:
-        """Add the OCR processing tag if configured; return True if claimed."""
-        tag_id = self.settings.OCR_PROCESSING_TAG_ID
-        if not tag_id:
-            return True
-        if tag_id in current_tags:
-            log.info(
-                "Document already claimed for OCR",
-                doc_id=self.doc_id,
-                processing_tag_id=tag_id,
-            )
-            return False
-        updated_tags = set(current_tags)
-        updated_tags.add(tag_id)
-        try:
-            self.paperless_client.update_document_metadata(
-                self.doc_id, tags=list(updated_tags)
-            )
-        except Exception:
-            log.exception(
-                "Failed to claim OCR processing tag",
-                doc_id=self.doc_id,
-                processing_tag_id=tag_id,
-            )
-            return False
-        log.info(
-            "Claimed document for OCR",
+    def _claim_processing_tag(self) -> bool:
+        """Claim the OCR processing tag with verification."""
+        return claim_processing_tag(
+            paperless_client=self.paperless_client,
             doc_id=self.doc_id,
-            processing_tag_id=tag_id,
+            tag_id=self.settings.OCR_PROCESSING_TAG_ID,
+            purpose="ocr",
         )
-        return True
 
     def _release_processing_tag(self) -> None:
         """Remove the OCR processing tag if it is still present."""
