@@ -127,6 +127,26 @@ def test_truncate_content_by_pages_limits_pages_and_keeps_footer():
     assert note is not None
 
 
+def test_truncate_content_by_pages_handles_model_headers():
+    content = (
+        "--- Page 1 (gpt-5-mini) ---\n"
+        "Page1\n\n"
+        "--- Page 2 (gpt-5-mini) ---\n"
+        "Page2\n\n"
+        "--- Page 3 (gpt-5-mini) ---\n"
+        "Page3\n\n"
+        "\n\nTranscribed by model: gpt-5-mini"
+    )
+
+    result, note = truncate_content_by_pages(content, 2, 0, 1000)
+
+    assert "--- Page 1 (gpt-5-mini) ---" in result
+    assert "--- Page 2 (gpt-5-mini) ---" in result
+    assert "--- Page 3 (gpt-5-mini) ---" not in result
+    assert "Transcribed by model: gpt-5-mini" in result
+    assert note is not None
+
+
 def test_truncate_content_by_pages_no_headers_returns_full():
     content = "Single page content"
 

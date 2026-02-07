@@ -18,7 +18,6 @@ designed to be instantiated for each document that needs processing.
 import datetime as dt
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import IO, List
 
 import structlog
 from PIL import Image, ImageSequence, UnidentifiedImageError
@@ -116,6 +115,18 @@ class DocumentProcessor:
             elapsed_time=f"{elapsed_time:.2f}s",
         )
 
+    def _handle_page_failures(self) -> None:
+        """Apply the policy for partial OCR failures."""
+        if not self.settings.ERROR_TAG_ID:
+            return
+        current_tags = self._get_latest_tags()
+        current_tags.add(self.settings.ERROR_TAG_ID)
+        if self.settings.OCR_PROCESSING_TAG_ID:
+            current_tags.discard(self.settings.OCR_PROCESSING_TAG_ID)
+        self.paperless_client.update_document_metadata(
+            self.doc_id, tags=list(current_tags)
+        )
+
     def _refresh_document(self) -> dict | None:
         """Refresh the document from Paperless and update the local cache."""
         try:
@@ -209,7 +220,7 @@ class DocumentProcessor:
 
     def _ocr_pages_in_parallel(
         self, images: list[Image.Image]
-    ) -> list[tuple[str, str]]:
+    ) -> tuple[list[tuple[str, str]], list[int]]:
         """Run OCR on each page concurrently and preserve the original order."""
         with ThreadPoolExecutor(max_workers=self.settings.PAGE_WORKERS) as executor:
             future_to_index = {
@@ -222,13 +233,15 @@ class DocumentProcessor:
                 for i, img in enumerate(images)
             }
             results = [("", "")] * len(images)
+            failed_pages: list[int] = []
             for future in as_completed(future_to_index):
                 index = future_to_index[future]
                 try:
                     results[index] = future.result()
                 except Exception:
                     log.exception("OCR failed on page", page_num=index + 1)
-            return results
+                    failed_pages.append(index + 1)
+            return results, failed_pages
 
     def _assemble_full_text(
         self, images: list[Image.Image], page_results: list[tuple[str, str]]
