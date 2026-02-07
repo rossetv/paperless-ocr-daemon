@@ -18,7 +18,7 @@ import structlog
 from .classifier import ClassificationProvider, ClassificationResult
 from .config import Settings
 from .paperless import PaperlessClient
-from .utils import contains_redacted_marker
+from .utils import is_error_content
 
 log = structlog.get_logger(__name__)
 
@@ -204,10 +204,7 @@ def _is_generic_document_type(value: str) -> bool:
 
 def _needs_error_tag(text: str) -> bool:
     """Return True if the OCR text contains refusal markers."""
-    text_lower = text.lower()
-    return contains_redacted_marker(text) or any(
-        phrase in text_lower for phrase in ERROR_PHRASES
-    )
+    return is_error_content(text, ERROR_PHRASES)
 
 
 def _extract_model_tags(text: str) -> list[str]:
@@ -366,13 +363,12 @@ def enrich_tags(
     Combine model-suggested tags with required tags.
     Required tags are always included and do not count toward tag_limit.
     """
-    text_lower = text.lower()
     tag_limit = max(0, tag_limit)
 
     base_tags = _dedupe_tags(tags)
     required_tags = []
 
-    if any(phrase in text_lower for phrase in ERROR_PHRASES):
+    if is_error_content(text, ERROR_PHRASES):
         required_tags.append("ERROR")
 
     required_tags.extend(_extract_model_tags(text))

@@ -15,7 +15,7 @@ import random
 import re
 import time
 from functools import wraps
-from typing import Callable, Type, TypeVar
+from typing import Callable, Iterable, Type, TypeVar
 
 import structlog
 from PIL import Image
@@ -104,3 +104,13 @@ def contains_redacted_marker(text: str) -> bool:
     Examples: "[REDACTED]", "[REDACTED NAME]", "[NAME REDACTED]".
     """
     return bool(_REDACTED_RE.search(text))
+
+
+def is_error_content(text: str, error_phrases: Iterable[str]) -> bool:
+    """
+    Return True if the text contains refusal phrases or redaction markers.
+    """
+    text_lower = text.lower()
+    return contains_redacted_marker(text) or any(
+        phrase in text_lower for phrase in error_phrases
+    )
