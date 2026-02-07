@@ -92,7 +92,14 @@ class DocumentProcessor:
                 log.warning("Document has no pages to process", doc_id=self.doc_id)
                 return
 
-            page_results = self._ocr_pages_in_parallel(images)
+            try:
+                page_results = self._ocr_pages_in_parallel(images)
+            finally:
+                for image in images:
+                    try:
+                        image.close()
+                    except Exception:
+                        log.warning("Failed to close image", doc_id=self.doc_id)
 
             full_text, models_used = self._assemble_full_text(images, page_results)
 
