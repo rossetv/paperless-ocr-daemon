@@ -223,11 +223,50 @@ def test_ocr_pages_in_parallel_handles_errors_and_order(
 
     processor.ocr_provider.transcribe_image.side_effect = side_effect
 
-    results = processor._ocr_pages_in_parallel(images)
+    results, failed_pages = processor._ocr_pages_in_parallel(images)
 
     assert results[0] == ("text-0", "model-0")
     assert results[1] == ("", "")
     assert results[2] == ("text-2", "model-2")
+    assert failed_pages == [2]
+
+
+@patch("paperless_ocr.worker.convert_from_path", return_value=[create_test_image(), create_test_image()])
+@patch("tempfile.NamedTemporaryFile")
+def test_process_document_partial_failure_marks_error_tag(
+    mock_tempfile,
+    mock_convert,
+    settings,
+    mock_paperless_client,
+    mock_doc,
+):
+    """
+    Test that partial OCR failures add the error tag and skip document updates.
+    """
+    mock_paperless_client.get_document.return_value = mock_doc
+    mock_paperless_client.download_content.return_value = (b"file_content", "application/pdf")
+    mock_paperless_client.update_document_metadata.reset_mock()
+
+    mock_file = MagicMock()
+    mock_file.__enter__.return_value.name = "/tmp/test.pdf"
+    mock_tempfile.return_value = mock_file
+
+    ocr_provider = MagicMock()
+    ocr_provider.transcribe_image.side_effect = [
+        ("Page 1 text", "model-a"),
+        RuntimeError("ocr failed"),
+    ]
+
+    processor = DocumentProcessor(
+        mock_doc, mock_paperless_client, ocr_provider, settings
+    )
+    processor.process()
+
+    mock_paperless_client.update_document.assert_not_called()
+    mock_paperless_client.update_document_metadata.assert_called()
+    args, kwargs = mock_paperless_client.update_document_metadata.call_args
+    assert args[0] == 1
+    assert settings.ERROR_TAG_ID in kwargs["tags"]
 
 
 def test_assemble_full_text_skips_blank_pages(settings, mock_paperless_client, mock_ocr_provider, mock_doc):
