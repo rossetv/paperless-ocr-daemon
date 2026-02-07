@@ -30,7 +30,7 @@ ERROR_PHRASES = [
     "i cannot help with transcrib",
 ]
 
-PAGE_HEADER_RE = re.compile(r"^--- Page \d+(?: \\([^)]+\\))? ---$", re.MULTILINE)
+PAGE_HEADER_RE = re.compile(r"^--- Page \d+(?: \([^)]+\))? ---$", re.MULTILINE)
 MODEL_FOOTER_RE = re.compile(r"transcribed by model:\s*(.+)", re.IGNORECASE)
 
 COMPANY_SUFFIXES = {
