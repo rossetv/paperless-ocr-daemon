@@ -92,15 +92,23 @@ class DocumentProcessor:
                 log.warning("Document has no pages to process", doc_id=self.doc_id)
                 return
 
-            page_results, failed_pages = self._ocr_pages_in_parallel(images)
+            try:
+                page_results, failed_pages = self._ocr_pages_in_parallel(images)
+            finally:
+                for image in images:
+                    try:
+                        image.close()
+                    except Exception:
+                        log.warning("Failed to close image", doc_id=self.doc_id)
 
             if failed_pages:
                 log.warning(
-                    "OCR failed on one or more pages; aborting update",
+                    "OCR failed on some pages; marking document as error",
                     doc_id=self.doc_id,
                     failed_pages=failed_pages,
                 )
-                self._handle_page_failures()
+                if self.settings.ERROR_TAG_ID:
+                    self._set_error_only_tags()
                 return
 
             full_text, models_used = self._assemble_full_text(images, page_results)
@@ -213,7 +221,7 @@ class DocumentProcessor:
                 for i, img in enumerate(images)
             }
             results = [("", "")] * len(images)
-            failed_pages: list[int] = []
+            failed_pages = []
             for future in as_completed(future_to_index):
                 index = future_to_index[future]
                 try:
