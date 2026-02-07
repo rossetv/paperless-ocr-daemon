@@ -15,6 +15,7 @@ from typing import Iterable
 
 import structlog
 
+from .claims import claim_processing_tag
 from .classifier import ClassificationProvider, ClassificationResult
 from .config import Settings
 from .paperless import PaperlessClient
@@ -666,7 +667,7 @@ class ClassificationProcessor:
                 self._finalize_with_error(current_tags)
                 return
 
-            claimed = self._claim_processing_tag(current_tags)
+            claimed = self._claim_processing_tag()
             if not claimed:
                 return
 
@@ -749,35 +750,14 @@ class ClassificationProcessor:
             updated.discard(self.settings.ERROR_TAG_ID)
         return updated
 
-    def _claim_processing_tag(self, tags: set[int]) -> bool:
-        """Add the classification processing tag if configured; return True if claimed."""
-        tag_id = self.settings.CLASSIFY_PROCESSING_TAG_ID
-        if not tag_id:
-            return True
-        if tag_id in tags:
-            log.info(
-                "Document already claimed for classification",
-                doc_id=self.doc_id,
-                processing_tag_id=tag_id,
-            )
-            return False
-        updated = set(tags)
-        updated.add(tag_id)
-        try:
-            self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
-        except Exception:
-            log.exception(
-                "Failed to claim classification processing tag",
-                doc_id=self.doc_id,
-                processing_tag_id=tag_id,
-            )
-            return False
-        log.info(
-            "Claimed document for classification",
+    def _claim_processing_tag(self) -> bool:
+        """Claim the classification processing tag with verification."""
+        return claim_processing_tag(
+            paperless_client=self.paperless_client,
             doc_id=self.doc_id,
-            processing_tag_id=tag_id,
+            tag_id=self.settings.CLASSIFY_PROCESSING_TAG_ID,
+            purpose="classification",
         )
-        return True
 
     def _release_processing_tag(self) -> None:
         """Remove the classification processing tag if it is still present."""
