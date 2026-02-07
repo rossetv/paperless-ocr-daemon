@@ -140,6 +140,38 @@ def test_process_document_with_no_images(
     mock_file.__exit__.assert_called_once()
 
 
+@patch("tempfile.NamedTemporaryFile")
+def test_process_closes_images_on_ocr_failure(
+    mock_tempfile,
+    settings,
+    mock_paperless_client,
+    mock_ocr_provider,
+    mock_doc,
+    mocker,
+):
+    """
+    Test that images are closed even if OCR raises an exception.
+    """
+    mock_file = MagicMock()
+    mock_file.__enter__.return_value.name = "/tmp/test.pdf"
+    mock_tempfile.return_value = mock_file
+    images = [MagicMock(), MagicMock()]
+
+    processor = DocumentProcessor(
+        mock_doc, mock_paperless_client, mock_ocr_provider, settings
+    )
+    mocker.patch.object(processor, "_file_to_images", return_value=images)
+    mocker.patch.object(
+        processor, "_ocr_pages_in_parallel", side_effect=RuntimeError("OCR blew up")
+    )
+
+    with pytest.raises(RuntimeError, match="OCR blew up"):
+        processor.process()
+
+    assert images[0].close.called
+    assert images[1].close.called
+
+
 @patch("paperless_ocr.worker.convert_from_path")
 @patch("tempfile.NamedTemporaryFile")
 def test_resource_cleanup_on_processing_error(
@@ -223,11 +255,12 @@ def test_ocr_pages_in_parallel_handles_errors_and_order(
 
     processor.ocr_provider.transcribe_image.side_effect = side_effect
 
-    results = processor._ocr_pages_in_parallel(images)
+    results, failed_pages = processor._ocr_pages_in_parallel(images)
 
     assert results[0] == ("text-0", "model-0")
     assert results[1] == ("", "")
     assert results[2] == ("text-2", "model-2")
+    assert failed_pages == [2]
 
 
 def test_assemble_full_text_skips_blank_pages(settings, mock_paperless_client, mock_ocr_provider, mock_doc):

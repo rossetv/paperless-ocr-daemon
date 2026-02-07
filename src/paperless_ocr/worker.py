@@ -92,7 +92,24 @@ class DocumentProcessor:
                 log.warning("Document has no pages to process", doc_id=self.doc_id)
                 return
 
-            page_results = self._ocr_pages_in_parallel(images)
+            try:
+                page_results, failed_pages = self._ocr_pages_in_parallel(images)
+            finally:
+                for image in images:
+                    try:
+                        image.close()
+                    except Exception:
+                        log.warning("Failed to close image", doc_id=self.doc_id)
+
+            if failed_pages:
+                log.warning(
+                    "OCR failed on some pages; marking document as error",
+                    doc_id=self.doc_id,
+                    failed_pages=failed_pages,
+                )
+                if self.settings.ERROR_TAG_ID:
+                    self._set_error_only_tags()
+                return
 
             full_text, models_used = self._assemble_full_text(images, page_results)
 
@@ -202,7 +219,7 @@ class DocumentProcessor:
 
     def _ocr_pages_in_parallel(
         self, images: list[Image.Image]
-    ) -> list[tuple[str, str]]:
+    ) -> tuple[list[tuple[str, str]], list[int]]:
         """Run OCR on each page concurrently and preserve the original order."""
         with ThreadPoolExecutor(max_workers=self.settings.PAGE_WORKERS) as executor:
             future_to_index = {
@@ -215,13 +232,15 @@ class DocumentProcessor:
                 for i, img in enumerate(images)
             }
             results = [("", "")] * len(images)
+            failed_pages = []
             for future in as_completed(future_to_index):
                 index = future_to_index[future]
                 try:
                     results[index] = future.result()
                 except Exception:
                     log.exception("OCR failed on page", page_num=index + 1)
-            return results
+                    failed_pages.append(index + 1)
+            return results, failed_pages
 
     def _assemble_full_text(
         self, images: list[Image.Image], page_results: list[tuple[str, str]]
