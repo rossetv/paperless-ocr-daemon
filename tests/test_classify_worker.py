@@ -30,6 +30,13 @@ def test_enrich_tags_adds_required_tags():
     assert "ireland" in result
 
 
+def test_enrich_tags_adds_error_for_redacted_marker():
+    text = "Content [REDACTED NAME] with marker."
+    result = enrich_tags([], text, "2024-03-01", "", 8)
+
+    assert "error" in result
+
+
 def test_enrich_tags_trims_to_limit():
     text = "Transcribed by model: gpt-5"
     tags = ["Tag1", "Tag2", "Tag3", "Tag4", "Tag5", "Tag6", "Tag7", "Tag8"]
