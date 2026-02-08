@@ -15,8 +15,8 @@ from dataclasses import dataclass
 import openai
 import structlog
 
-from .config import Settings
-from .llm import OpenAIChatMixin
+from common.config import Settings
+from common.llm import OpenAIChatMixin
 
 log = structlog.get_logger(__name__)
 

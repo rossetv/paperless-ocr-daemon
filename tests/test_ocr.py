@@ -3,8 +3,8 @@ import openai
 import pytest
 from PIL import Image
 
-from paperless_ocr.config import Settings
-from paperless_ocr.ocr import OpenAIProvider, _is_refusal
+from common.config import Settings
+from ocr.provider import OpenAIProvider, _is_refusal
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def ocr_provider(settings):
 @pytest.fixture
 def mock_create_completion(mocker):
     """Fixture to mock the _create_completion method, which is decorated with @retry."""
-    return mocker.patch("paperless_ocr.ocr.OpenAIProvider._create_completion")
+    return mocker.patch("ocr.provider.OpenAIProvider._create_completion")
 
 
 def create_mock_response(mocker, content):

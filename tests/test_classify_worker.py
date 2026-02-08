@@ -3,15 +3,15 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from paperless_ocr.classify_worker import (
+from classifier.worker import (
     ClassificationProcessor,
     enrich_tags,
     truncate_content_by_pages,
     _filter_blacklisted_tags,
     _filter_redundant_tags,
 )
-from paperless_ocr.classifier import ClassificationResult
-from paperless_ocr.config import Settings
+from classifier.provider import ClassificationResult
+from common.config import Settings
 
 
 def test_enrich_tags_adds_required_tags():

@@ -12,12 +12,12 @@ from typing import Iterable
 
 import structlog
 
-from .classifier import ClassificationProvider
-from .classify_worker import ClassificationProcessor, TaxonomyCache
-from .config import Settings, setup_libraries
-from .daemon_loop import run_polling_threadpool
-from .logging_config import configure_logging
-from .paperless import PaperlessClient
+from common.config import Settings, setup_libraries
+from common.daemon_loop import run_polling_threadpool
+from common.logging_config import configure_logging
+from common.paperless import PaperlessClient
+from .provider import ClassificationProvider
+from .worker import ClassificationProcessor, TaxonomyCache
 
 
 def _iter_docs_to_classify(

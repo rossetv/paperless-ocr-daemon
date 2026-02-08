@@ -25,11 +25,11 @@ import structlog
 from PIL import Image, ImageSequence, UnidentifiedImageError
 from pdf2image import convert_from_bytes
 
-from .claims import claim_processing_tag
-from .config import Settings
-from .ocr import OcrProvider
-from .paperless import PaperlessClient
-from .utils import contains_redacted_marker
+from common.claims import claim_processing_tag
+from common.config import Settings
+from common.paperless import PaperlessClient
+from common.utils import contains_redacted_marker
+from .provider import OcrProvider
 
 log = structlog.get_logger(__name__)
 

@@ -1,4 +1,4 @@
-from paperless_ocr.daemon_loop import run_polling_threadpool
+from common.daemon_loop import run_polling_threadpool
 
 
 def test_run_polling_threadpool_processes_batch_and_continues_on_item_error():
@@ -42,4 +42,3 @@ def test_run_polling_threadpool_processes_batch_and_continues_on_item_error():
     assert attempted == [1, 2, 3]
     assert processed == [1, 3]
     assert sleep_calls["count"] == 1
-

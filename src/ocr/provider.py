@@ -21,9 +21,9 @@ import openai
 import structlog
 from PIL import Image
 
-from .config import Settings
-from .llm import OpenAIChatMixin
-from .utils import contains_redacted_marker, is_blank
+from common.config import Settings
+from common.llm import OpenAIChatMixin
+from common.utils import contains_redacted_marker, is_blank
 
 log = structlog.get_logger(__name__)
 

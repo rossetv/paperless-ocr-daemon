@@ -3,8 +3,8 @@ import os
 
 import structlog
 
-from paperless_ocr.config import Settings
-from paperless_ocr.logging_config import configure_logging
+from common.config import Settings
+from common.logging_config import configure_logging
 
 
 def _make_settings(log_format: str, log_level: str):

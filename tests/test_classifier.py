@@ -4,8 +4,11 @@ import httpx
 import openai
 import pytest
 
-from paperless_ocr.classifier import ClassificationProvider, parse_classification_response
-from paperless_ocr.config import Settings
+from classifier.provider import (
+    ClassificationProvider,
+    parse_classification_response,
+)
+from common.config import Settings
 
 
 def create_mock_response(mocker, content):
@@ -69,7 +72,7 @@ def test_parse_classification_response_tags_string():
 def test_classify_text_fallback_on_invalid_json(settings, mocker):
     provider = ClassificationProvider(settings)
     mock_create = mocker.patch(
-        "paperless_ocr.classifier.ClassificationProvider._create_completion"
+        "classifier.provider.ClassificationProvider._create_completion"
     )
     mock_create.side_effect = [
         create_mock_response(mocker, "not json"),
@@ -95,7 +98,7 @@ def test_classify_text_omits_temperature_for_gpt5(settings, mocker):
     settings.AI_MODELS = ["gpt-5-mini", "classify-fallback"]
     provider = ClassificationProvider(settings)
     mock_create = mocker.patch(
-        "paperless_ocr.classifier.ClassificationProvider._create_completion"
+        "classifier.provider.ClassificationProvider._create_completion"
     )
     mock_create.return_value = create_mock_response(
         mocker,
@@ -116,7 +119,7 @@ def test_classify_text_adds_max_tokens(settings, mocker):
     settings.CLASSIFY_MAX_TOKENS = 123
     provider = ClassificationProvider(settings)
     mock_create = mocker.patch(
-        "paperless_ocr.classifier.ClassificationProvider._create_completion"
+        "classifier.provider.ClassificationProvider._create_completion"
     )
     mock_create.return_value = create_mock_response(
         mocker,
@@ -135,7 +138,7 @@ def test_classify_text_adds_max_tokens(settings, mocker):
 def test_classify_text_retries_without_temperature_on_error(settings, mocker):
     provider = ClassificationProvider(settings)
     mock_create = mocker.patch(
-        "paperless_ocr.classifier.ClassificationProvider._create_completion"
+        "classifier.provider.ClassificationProvider._create_completion"
     )
     temp_error = create_bad_request_error(
         "Unsupported value: 'temperature' does not support 0.2 with this model."

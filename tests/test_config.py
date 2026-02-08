@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from paperless_ocr.config import Settings, setup_libraries
+from common.config import Settings, setup_libraries
 
 
 def test_settings_default_values(mocker):

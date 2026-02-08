@@ -4,8 +4,8 @@ import pytest
 import requests
 import requests_mock
 
-from paperless_ocr.config import Settings
-from paperless_ocr.paperless import PaperlessClient
+from common.config import Settings
+from common.paperless import PaperlessClient
 
 
 @pytest.fixture

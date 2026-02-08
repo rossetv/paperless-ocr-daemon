@@ -49,7 +49,7 @@ docker run -d --name paperless-classifier-daemon \
   paperless-classifier-daemon
 ```
 
-You can also run the classifier with `python3 -m src.paperless_ocr.classify_main` if you prefer.
+You can also run the classifier with `python3 -m src.classifier.daemon` if you prefer.
 
 If you use Ollama instead of OpenAI:
 
@@ -132,17 +132,25 @@ Notes:
 
 ## Architecture
 
-- `src/paperless_ocr/main.py` - OCR daemon entrypoint.
-- `src/paperless_ocr/worker.py` - OCR pipeline.
-- `src/paperless_ocr/ocr.py` - OCR provider interface and OpenAI/Ollama implementation.
-- `src/paperless_ocr/classify_main.py` - classification daemon entrypoint.
-- `src/paperless_ocr/classify_worker.py` - classification pipeline.
-- `src/paperless_ocr/classifier.py` - classification prompt, response parsing, and LLM calls.
-- `src/paperless_ocr/paperless.py` - Paperless-ngx API client.
-- `src/paperless_ocr/config.py` - configuration and validation.
-- `src/paperless_ocr/utils.py` - retry helper utilities.
-- `src/paperless_ocr/logging_config.py` - logging setup.
-- `src/paperless_ocr/daemon_loop.py` - shared polling loop used by both daemons.
+The codebase is split into reusable top-level packages:
+
+- `src/common/` - shared building blocks (config, Paperless client, retry, logging, daemon loop).
+- `src/ocr/` - OCR provider + single-document worker + daemon entrypoint.
+- `src/classifier/` - classification provider + single-document worker + daemon entrypoint.
+
+Key modules:
+
+- `src/ocr/daemon.py` - OCR daemon entrypoint.
+- `src/ocr/worker.py` - OCR pipeline (single-document worker).
+- `src/ocr/provider.py` - OCR provider interface and OpenAI/Ollama implementation.
+- `src/classifier/daemon.py` - classification daemon entrypoint.
+- `src/classifier/worker.py` - classification pipeline (single-document worker).
+- `src/classifier/provider.py` - classification prompt, response parsing, and LLM calls.
+- `src/common/paperless.py` - Paperless-ngx API client.
+- `src/common/config.py` - configuration and validation.
+- `src/common/utils.py` - retry helper utilities.
+- `src/common/logging_config.py` - logging setup.
+- `src/common/daemon_loop.py` - shared polling loop used by both daemons.
 
 ## Runtime dependencies
 
@@ -156,7 +164,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -e . -r requirements-dev.txt
 pytest
-python3 -m src.paperless_ocr.main
+python3 -m src.ocr.daemon
 ```
 
 ## Logging

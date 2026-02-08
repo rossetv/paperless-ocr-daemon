@@ -24,11 +24,11 @@ from typing import Iterable
 
 import structlog
 
-from .config import Settings, setup_libraries
-from .daemon_loop import run_polling_threadpool
-from .logging_config import configure_logging
-from .ocr import OpenAIProvider
-from .paperless import PaperlessClient
+from common.config import Settings, setup_libraries
+from common.daemon_loop import run_polling_threadpool
+from common.logging_config import configure_logging
+from common.paperless import PaperlessClient
+from .provider import OpenAIProvider
 from .worker import DocumentProcessor
 
 
@@ -52,6 +52,7 @@ def _process_document(doc: dict, settings: Settings) -> None:
         processor.process()
     finally:
         paperless.close()
+
 
 def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Iterable[dict]:
     """

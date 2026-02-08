@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from paperless_ocr.claims import claim_processing_tag
+from common.claims import claim_processing_tag
 
 
 def test_claim_processing_tag_verifies_after_patch():

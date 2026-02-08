@@ -83,5 +83,5 @@ USER appuser
 
 # Set the default command to run the OCR daemon.
 # (The same image can run the classifier via: `paperless-classifier-daemon`
-# or `python3 -m src.paperless_ocr.classify_main`.)
+# or `python3 -m src.classifier.daemon`.)
 CMD ["paperless-ocr-daemon"]

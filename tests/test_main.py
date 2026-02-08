@@ -1,4 +1,4 @@
-from paperless_ocr import main as main_module
+from ocr import daemon as main_module
 
 
 def _set_required_env(monkeypatch):
@@ -148,4 +148,3 @@ def test_main_continues_after_processing_error(monkeypatch):
     assert processed == [2]
     assert len(DummyPaperlessClient.instances) == 3  # list client + 2 per-doc clients
     assert all(client.closed for client in DummyPaperlessClient.instances)
-

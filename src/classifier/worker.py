@@ -15,11 +15,11 @@ from typing import Iterable
 
 import structlog
 
-from .claims import claim_processing_tag
-from .classifier import ClassificationProvider, ClassificationResult
-from .config import Settings
-from .paperless import PaperlessClient
-from .utils import is_error_content
+from common.claims import claim_processing_tag
+from common.config import Settings
+from common.paperless import PaperlessClient
+from common.utils import is_error_content
+from .provider import ClassificationProvider, ClassificationResult
 
 log = structlog.get_logger(__name__)
 

@@ -11,20 +11,28 @@ errors with exponential backoff and jitter, as well as a helper for
 detecting blank images. These utilities help to improve the resilience
 and efficiency of the daemon.
 """
+
+from __future__ import annotations
+
 import random
 import re
 import time
 from functools import wraps
-from typing import Callable, Iterable, Type, TypeVar
+from typing import Callable, Iterable, Protocol, Type, TypeVar
 
 import structlog
 from PIL import Image
 
-from .config import Settings
-
 log = structlog.get_logger(__name__)
 T = TypeVar("T")
 _REDACTED_RE = re.compile(r"\[[^\]]*redacted[^\]]*\]", re.IGNORECASE)
+
+
+class RetrySettings(Protocol):
+    """The settings fields required by the `retry` decorator."""
+
+    MAX_RETRIES: int
+    MAX_RETRY_BACKOFF_SECONDS: int
 
 
 def retry(
@@ -44,7 +52,7 @@ def retry(
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(self, *args, **kwargs) -> T:
-            settings: Settings = self.settings
+            settings: RetrySettings = self.settings
             if settings.MAX_RETRIES < 1:
                 raise ValueError("MAX_RETRIES must be >= 1")
             for attempt in range(1, settings.MAX_RETRIES + 1):
@@ -74,7 +82,7 @@ def retry(
     return decorator
 
 
-def _sleep_backoff(attempt: int, settings: Settings) -> None:
+def _sleep_backoff(attempt: int, settings: RetrySettings) -> None:
     """Sleep for a short duration with exponential backoff, jitter, and a cap."""
     delay = (2**attempt) * random.uniform(0.8, 1.2)
     delay = min(delay, settings.MAX_RETRY_BACKOFF_SECONDS)

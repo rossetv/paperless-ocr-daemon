@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from paperless_ocr.classify_worker import TaxonomyCache
+from classifier.worker import TaxonomyCache
 
 
 def test_taxonomy_cache_refresh_and_lookup_existing_items():
@@ -77,4 +77,3 @@ def test_taxonomy_cache_tag_creation_uses_matching_algorithm_from_existing_tags(
 
     # When an existing tag uses an int matching_algorithm, we use 0 for new tags.
     client.create_tag.assert_called_once_with("NewTag", matching_algorithm=0)
-

@@ -1,4 +1,4 @@
-from paperless_ocr import classify_main as classify_main_module
+from classifier import daemon as classify_main_module
 
 
 def _set_required_env(monkeypatch):
@@ -100,4 +100,3 @@ def test_classify_main_skips_docs_with_post_tag_and_cleans_stale_pre_tag(monkeyp
     assert len(DummyPaperlessClient.instances) == 3  # list + taxonomy + per-doc
     assert DummyPaperlessClient.instances[0].updated_tags[2] == {12, 99}
     assert all(client.closed for client in DummyPaperlessClient.instances)
-
