@@ -2,27 +2,30 @@
 Paperless-ngx AI OCR Daemon
 ===========================
 
-This script is the main entry point for the Paperless-ngx AI OCR daemon.
-It continuously polls a Paperless-ngx instance for documents that have
-been tagged for OCR processing. When a new document is found, it is
-downloaded, and each page is transcribed by an AI model. The resulting
-plain text is then uploaded back to the document, and the tag is updated
-to mark it as processed.
+This module is the entry point for the OCR daemon.
 
-The daemon is designed to be resilient, with robust retry mechanisms for
-network requests and AI model interactions. It supports multiple OCR
-providers and can process multi-page documents in parallel to improve
-throughput. The configuration is managed through environment variables,
-allowing for flexible deployment in various environments.
+High-level behaviour
+--------------------
+
+1. Poll Paperless-ngx for documents with the *OCR queue tag* (``PRE_TAG_ID``).
+2. For each queued document:
+   - Download the original file.
+   - Convert the file to images (PDF pages or image frames).
+   - Transcribe each page using a vision-capable LLM.
+   - Upload the transcription back to Paperless (``content`` field).
+   - Update tags to move the document through the pipeline.
+
+The exact tags are configured via environment variables (see ``Settings``).
 """
 
-import datetime as dt
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from __future__ import annotations
+
+from typing import Iterable
 
 import structlog
 
 from .config import Settings, setup_libraries
+from .daemon_loop import run_polling_threadpool
 from .logging_config import configure_logging
 from .ocr import OpenAIProvider
 from .paperless import PaperlessClient
@@ -30,6 +33,13 @@ from .worker import DocumentProcessor
 
 
 def _process_document(doc: dict, settings: Settings) -> None:
+    """
+    Process a single Paperless document.
+
+    The daemon runs multiple documents concurrently; each document gets its own
+    Paperless HTTP session. The OCR provider instance is shared across pages
+    within the document (pages are processed in parallel).
+    """
     paperless = PaperlessClient(settings)
     ocr_provider = OpenAIProvider(settings)
     try:
@@ -42,6 +52,58 @@ def _process_document(doc: dict, settings: Settings) -> None:
         processor.process()
     finally:
         paperless.close()
+
+def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Iterable[dict]:
+    """
+    Yield documents that should be OCR'd.
+
+    Notes on tag hygiene
+    --------------------
+
+    Paperless queries here are tag-based (``tags__id=<PRE_TAG_ID>``). If a
+    document somehow has both the pre-tag and post-tag, OCR is skipped (to avoid
+    repeated OCR cost) and we remove the stale pre-tag so it stops re-appearing
+    in the queue.
+    """
+    log = structlog.get_logger(__name__)
+    for doc in list_client.get_documents_by_tag(settings.PRE_TAG_ID):
+        doc_id = doc.get("id")
+        if not isinstance(doc_id, int):
+            log.warning("Skipping document without integer id", doc_id=doc_id)
+            continue
+
+        tags_raw = doc.get("tags", []) or []
+        tags = set(tags_raw if isinstance(tags_raw, list) else [])
+
+        # If a document has both the "queued" tag and the "processed" tag, treat it
+        # as already processed and remove the stale queue tag.
+        if settings.POST_TAG_ID in tags:
+            if settings.PRE_TAG_ID in tags:
+                tags.discard(settings.PRE_TAG_ID)
+                try:
+                    list_client.update_document_metadata(doc_id, tags=list(tags))
+                except Exception:
+                    log.exception(
+                        "Failed to remove stale pre-tag from already processed document",
+                        doc_id=doc_id,
+                        pre_tag_id=settings.PRE_TAG_ID,
+                        post_tag_id=settings.POST_TAG_ID,
+                    )
+                else:
+                    log.info(
+                        "Removed stale pre-tag from already processed document",
+                        doc_id=doc_id,
+                        pre_tag_id=settings.PRE_TAG_ID,
+                        post_tag_id=settings.POST_TAG_ID,
+                    )
+            continue
+
+        # If configured, the processing tag acts as a best-effort lock. We skip
+        # documents that are already claimed to reduce duplicate work.
+        if settings.OCR_PROCESSING_TAG_ID and settings.OCR_PROCESSING_TAG_ID in tags:
+            continue
+
+        yield doc
 
 
 def main() -> None:
@@ -75,53 +137,17 @@ def main() -> None:
         ocr_processing_tag_id=settings.OCR_PROCESSING_TAG_ID,
     )
 
-    paperless_client = PaperlessClient(settings)
-
-    was_idle = False
-    while True:
-        try:
-            # Fetch all documents that have the pre-tag
-            docs_to_process = [
-                doc
-                for doc in paperless_client.get_documents_to_process()
-                if settings.POST_TAG_ID not in doc.get("tags", [])
-            ]
-
-            if not docs_to_process:
-                if not was_idle:
-                    log.info("No documents to process. Waiting...")
-                was_idle = True
-                time.sleep(settings.POLL_INTERVAL)
-                continue
-
-            was_idle = False
-            log.info(
-                "Found documents to process",
-                doc_count=len(docs_to_process),
-                document_workers=settings.DOCUMENT_WORKERS,
-            )
-
-            with ThreadPoolExecutor(max_workers=settings.DOCUMENT_WORKERS) as executor:
-                future_to_doc = {
-                    executor.submit(_process_document, doc, settings): doc
-                    for doc in docs_to_process
-                }
-                for future in as_completed(future_to_doc):
-                    doc = future_to_doc[future]
-                    try:
-                        future.result()
-                    except Exception:
-                        log.exception(
-                            "Failed to process document", doc_id=doc.get("id")
-                        )
-
-            time.sleep(settings.POLL_INTERVAL)
-        except KeyboardInterrupt:
-            log.info("Ctrl-C received, exiting.")
-            break
-        except Exception:
-            log.exception("An unexpected error occurred in the main loop")
-            time.sleep(settings.POLL_INTERVAL)
+    list_client = PaperlessClient(settings)
+    try:
+        run_polling_threadpool(
+            daemon_name="ocr",
+            fetch_work=lambda: list(_iter_docs_to_ocr(list_client, settings)),
+            process_item=lambda doc: _process_document(doc, settings),
+            poll_interval_seconds=settings.POLL_INTERVAL,
+            max_workers=settings.DOCUMENT_WORKERS,
+        )
+    finally:
+        list_client.close()
 
 
 if __name__ == "__main__":

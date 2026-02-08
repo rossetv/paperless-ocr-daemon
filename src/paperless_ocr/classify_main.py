@@ -6,17 +6,70 @@ This script polls Paperless-ngx for documents tagged after OCR and
 classifies them using an LLM, applying metadata updates and tags.
 """
 
-import datetime as dt
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from __future__ import annotations
+
+from typing import Iterable
 
 import structlog
 
 from .classifier import ClassificationProvider
 from .classify_worker import ClassificationProcessor, TaxonomyCache
 from .config import Settings, setup_libraries
+from .daemon_loop import run_polling_threadpool
 from .logging_config import configure_logging
 from .paperless import PaperlessClient
+
+
+def _iter_docs_to_classify(
+    list_client: PaperlessClient, settings: Settings
+) -> Iterable[dict]:
+    """
+    Yield documents that should be classified.
+
+    If ``CLASSIFY_POST_TAG_ID`` is configured and a document already has it,
+    classification is skipped and we remove the stale pre-tag so the document
+    stops re-appearing in the queue.
+    """
+    log = structlog.get_logger(__name__)
+    for doc in list_client.get_documents_by_tag(settings.CLASSIFY_PRE_TAG_ID):
+        doc_id = doc.get("id")
+        if not isinstance(doc_id, int):
+            log.warning("Skipping document without integer id", doc_id=doc_id)
+            continue
+
+        tags_raw = doc.get("tags", []) or []
+        tags = set(tags_raw if isinstance(tags_raw, list) else [])
+
+        if settings.CLASSIFY_POST_TAG_ID and settings.CLASSIFY_POST_TAG_ID in tags:
+            if settings.CLASSIFY_PRE_TAG_ID in tags:
+                tags.discard(settings.CLASSIFY_PRE_TAG_ID)
+                if settings.CLASSIFY_PROCESSING_TAG_ID:
+                    tags.discard(settings.CLASSIFY_PROCESSING_TAG_ID)
+                try:
+                    list_client.update_document_metadata(doc_id, tags=list(tags))
+                except Exception:
+                    log.exception(
+                        "Failed to remove stale classify-pre tag from already processed document",
+                        doc_id=doc_id,
+                        classify_pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
+                        classify_post_tag_id=settings.CLASSIFY_POST_TAG_ID,
+                    )
+                else:
+                    log.info(
+                        "Removed stale classify-pre tag from already processed document",
+                        doc_id=doc_id,
+                        classify_pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
+                        classify_post_tag_id=settings.CLASSIFY_POST_TAG_ID,
+                    )
+            continue
+
+        if (
+            settings.CLASSIFY_PROCESSING_TAG_ID
+            and settings.CLASSIFY_PROCESSING_TAG_ID in tags
+        ):
+            continue
+
+        yield doc
 
 
 def main() -> None:
@@ -46,71 +99,30 @@ def main() -> None:
     taxonomy_client = PaperlessClient(settings)
     taxonomy_cache = TaxonomyCache(taxonomy_client, settings.CLASSIFY_TAXONOMY_LIMIT)
 
-    was_idle = False
+    def process_document(doc: dict) -> None:
+        paperless = PaperlessClient(settings)
+        classifier = ClassificationProvider(settings)
+        try:
+            processor = ClassificationProcessor(
+                doc,
+                paperless,
+                classifier,
+                taxonomy_cache,
+                settings,
+            )
+            processor.process()
+        finally:
+            paperless.close()
+
     try:
-        while True:
-            try:
-                all_docs = list_client.get_documents_by_tag(settings.CLASSIFY_PRE_TAG_ID)
-                docs_to_process = [
-                    doc
-                    for doc in all_docs
-                    if not (
-                        settings.CLASSIFY_POST_TAG_ID
-                        and settings.CLASSIFY_POST_TAG_ID in doc.get("tags", [])
-                    )
-                ]
-
-                if docs_to_process:
-                    was_idle = False
-                    taxonomy_cache.refresh()
-                    log.info(
-                        "Found documents to classify",
-                        doc_count=len(docs_to_process),
-                        document_workers=settings.DOCUMENT_WORKERS,
-                    )
-
-                    def process_document(doc: dict) -> None:
-                        paperless = PaperlessClient(settings)
-                        classifier = ClassificationProvider(settings)
-                        try:
-                            processor = ClassificationProcessor(
-                                doc,
-                                paperless,
-                                classifier,
-                                taxonomy_cache,
-                                settings,
-                            )
-                            processor.process()
-                        finally:
-                            paperless.close()
-
-                    with ThreadPoolExecutor(
-                        max_workers=settings.DOCUMENT_WORKERS
-                    ) as executor:
-                        future_to_doc = {
-                            executor.submit(process_document, doc): doc
-                            for doc in docs_to_process
-                        }
-                        for future in as_completed(future_to_doc):
-                            doc = future_to_doc[future]
-                            try:
-                                future.result()
-                            except Exception:
-                                log.exception(
-                                    "Failed to classify document", doc_id=doc.get("id")
-                                )
-                else:
-                    if not was_idle:
-                        log.info("No documents to classify. Waiting...")
-                        was_idle = True
-
-                time.sleep(settings.POLL_INTERVAL)
-            except KeyboardInterrupt:
-                log.info("Ctrl-C received, exiting.")
-                break
-            except Exception:
-                log.exception("An unexpected error occurred in the main loop")
-                time.sleep(settings.POLL_INTERVAL)
+        run_polling_threadpool(
+            daemon_name="classifier",
+            fetch_work=lambda: list(_iter_docs_to_classify(list_client, settings)),
+            process_item=process_document,
+            before_each_batch=lambda _: taxonomy_cache.refresh(),
+            poll_interval_seconds=settings.POLL_INTERVAL,
+            max_workers=settings.DOCUMENT_WORKERS,
+        )
     finally:
         list_client.close()
         taxonomy_client.close()

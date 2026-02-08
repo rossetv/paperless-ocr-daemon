@@ -81,5 +81,7 @@ RUN chown -R appuser:appgroup /app /opt/venv
 # Switch to the non-root user
 USER appuser
 
-# Set the default command to run the application
-CMD ["python3", "-m", "src.paperless_ocr.main"]
+# Set the default command to run the OCR daemon.
+# (The same image can run the classifier via: `paperless-classifier-daemon`
+# or `python3 -m src.paperless_ocr.classify_main`.)
+CMD ["paperless-ocr-daemon"]

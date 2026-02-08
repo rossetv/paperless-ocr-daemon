@@ -15,13 +15,15 @@ the document in Paperless-ngx with the new content and tags. This class is
 designed to be instantiated for each document that needs processing.
 """
 
+from __future__ import annotations
+
 import datetime as dt
-import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
 
 import structlog
 from PIL import Image, ImageSequence, UnidentifiedImageError
-from pdf2image import convert_from_path
+from pdf2image import convert_from_bytes
 
 from .claims import claim_processing_tag
 from .config import Settings
@@ -30,6 +32,8 @@ from .paperless import PaperlessClient
 from .utils import contains_redacted_marker
 
 log = structlog.get_logger(__name__)
+
+OCR_ERROR_MARKER = "[OCR ERROR]"
 
 
 class DocumentProcessor:
@@ -72,7 +76,7 @@ class DocumentProcessor:
                     "Document has error tag; skipping OCR",
                     doc_id=self.doc_id,
                 )
-                self._set_error_only_tags()
+                self._finalize_with_error(current_tags)
                 return
 
             claimed = self._claim_processing_tag()
@@ -80,13 +84,7 @@ class DocumentProcessor:
                 return
 
             content, content_type = self.paperless_client.download_content(self.doc_id)
-            extension = ".pdf" if "pdf" in content_type else ".bin"
-
-            with tempfile.NamedTemporaryFile(delete=True, suffix=extension) as temp_file:
-                temp_file.write(content)
-                temp_file.flush()  # Ensure content is written to disk
-
-                images = self._file_to_images(temp_file.name, content_type)
+            images = self._bytes_to_images(content, content_type)
 
             if not images:
                 log.warning("Document has no pages to process", doc_id=self.doc_id)
@@ -107,9 +105,6 @@ class DocumentProcessor:
                     doc_id=self.doc_id,
                     failed_pages=failed_pages,
                 )
-                if self.settings.ERROR_TAG_ID:
-                    self._set_error_only_tags()
-                return
 
             full_text, models_used = self._assemble_full_text(images, page_results)
 
@@ -124,18 +119,6 @@ class DocumentProcessor:
             "Finished processing document",
             doc_id=self.doc_id,
             elapsed_time=f"{elapsed_time:.2f}s",
-        )
-
-    def _handle_page_failures(self) -> None:
-        """Apply the policy for partial OCR failures."""
-        if not self.settings.ERROR_TAG_ID:
-            return
-        current_tags = self._get_latest_tags()
-        current_tags.add(self.settings.ERROR_TAG_ID)
-        if self.settings.OCR_PROCESSING_TAG_ID:
-            current_tags.discard(self.settings.OCR_PROCESSING_TAG_ID)
-        self.paperless_client.update_document_metadata(
-            self.doc_id, tags=list(current_tags)
         )
 
     def _refresh_document(self) -> dict | None:
@@ -191,18 +174,29 @@ class DocumentProcessor:
             return
         log.info("OCR stats", doc_id=self.doc_id, **stats)
 
-    def _file_to_images(self, path: str, content_type: str) -> list[Image.Image]:
-        """Convert the downloaded file to a list of PIL.Image instances."""
-        if "pdf" in content_type:
-            return convert_from_path(path, dpi=self.settings.OCR_DPI)
+    def _bytes_to_images(self, content: bytes, content_type: str) -> list[Image.Image]:
+        """
+        Convert downloaded bytes into a list of PIL Images.
+
+        - PDFs are rasterised into one image per page.
+        - Image formats (PNG/JPEG/TIFF/...) are loaded via Pillow.
+        - Multi-frame images (e.g. TIFF) are expanded into one image per frame.
+
+        The returned images are fully loaded into memory, so they do not depend on
+        any open file handles.
+        """
+        if "pdf" in content_type.lower():
+            return convert_from_bytes(content, dpi=self.settings.OCR_DPI)
         try:
-            img = Image.open(path)
-            img.load()
+            img = Image.open(BytesIO(content))
+            img.load()  # fully decode so the underlying buffer can be released
             if getattr(img, "n_frames", 1) > 1:
                 frames = [frame.copy() for frame in ImageSequence.Iterator(img)]
                 img.close()
                 return frames
-            return [img]
+            single = img.copy()
+            img.close()
+            return [single]
         except UnidentifiedImageError as e:
             raise RuntimeError(f"Unable to open image: {e}") from e
 
@@ -229,6 +223,12 @@ class DocumentProcessor:
                 except Exception:
                     log.exception("OCR failed on page", page_num=index + 1)
                     failed_pages.append(index + 1)
+                    # Insert a marker into the document content so downstream
+                    # steps (and humans) can see this was a pipeline failure.
+                    results[index] = (
+                        f"{OCR_ERROR_MARKER} Failed to OCR page {index + 1}.",
+                        "",
+                    )
             return results, failed_pages
 
     def _assemble_full_text(
@@ -261,17 +261,24 @@ class DocumentProcessor:
         """
         Update the document in Paperless with the new content and tags.
         """
-        if self.settings.ERROR_TAG_ID and (
-            self.settings.REFUSAL_MARK in full_text
+        if not full_text.strip():
+            # If OCR produced nothing, passing an empty "content" field into the
+            # classification daemon causes a requeue loop. Treat this as an OCR
+            # failure and mark the document for manual review.
+            log.warning("OCR produced no text; marking error", doc_id=self.doc_id)
+            self._finalize_with_error(self._get_latest_tags(), content=full_text)
+            return
+
+        if (
+            OCR_ERROR_MARKER in full_text
+            or self.settings.REFUSAL_MARK in full_text
             or contains_redacted_marker(full_text)
         ):
-            self.paperless_client.update_document(
-                self.doc_id, full_text, [self.settings.ERROR_TAG_ID]
-            )
             log.warning(
-                "OCR produced refusal/redacted content; marking error",
+                "OCR produced error/refusal/redacted markers; marking error",
                 doc_id=self.doc_id,
             )
+            self._finalize_with_error(self._get_latest_tags(), content=full_text)
             return
 
         current_tags = self._get_latest_tags()
@@ -310,10 +317,37 @@ class DocumentProcessor:
             return set(cached_tags)
         return set(latest_tags)
 
-    def _set_error_only_tags(self) -> None:
-        """Replace all tags with the error tag."""
-        if not self.settings.ERROR_TAG_ID:
-            return
-        self.paperless_client.update_document_metadata(
-            self.doc_id, tags=[self.settings.ERROR_TAG_ID]
-        )
+    def _finalize_with_error(self, tags: set[int], *, content: str | None = None) -> None:
+        """
+        Mark the document as errored and remove pipeline tags.
+
+        Tag behaviour is intentionally conservative: we remove only the tags used
+        by this pipeline, keep any user-assigned tags, and add ``ERROR_TAG_ID``
+        when configured.
+
+        If ``content`` is provided, we update the Paperless ``content`` field as
+        well (useful when the OCR output contains refusal markers).
+        """
+        updated = set(tags)
+
+        # Remove pipeline tags so the document does not get re-queued indefinitely.
+        for tag_id in (
+            self.settings.PRE_TAG_ID,
+            self.settings.POST_TAG_ID,
+            self.settings.CLASSIFY_PRE_TAG_ID,
+        ):
+            updated.discard(tag_id)
+        if self.settings.CLASSIFY_POST_TAG_ID:
+            updated.discard(self.settings.CLASSIFY_POST_TAG_ID)
+        if self.settings.OCR_PROCESSING_TAG_ID:
+            updated.discard(self.settings.OCR_PROCESSING_TAG_ID)
+        if self.settings.CLASSIFY_PROCESSING_TAG_ID:
+            updated.discard(self.settings.CLASSIFY_PROCESSING_TAG_ID)
+
+        if self.settings.ERROR_TAG_ID:
+            updated.add(self.settings.ERROR_TAG_ID)
+
+        if content is None:
+            self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
+        else:
+            self.paperless_client.update_document(self.doc_id, content, list(updated))

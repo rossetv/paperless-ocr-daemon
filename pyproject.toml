@@ -5,6 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "paperless-ocr"
 version = "1.0.0"
+requires-python = ">=3.11"
 dependencies = [
     "requests==2.32.4",
     "openai==1.35.10",
@@ -12,6 +13,10 @@ dependencies = [
     "pdf2image==1.17.0",
     "structlog==24.2.0",
 ]
+
+[project.scripts]
+paperless-ocr-daemon = "paperless_ocr.main:main"
+paperless-classifier-daemon = "paperless_ocr.classify_main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

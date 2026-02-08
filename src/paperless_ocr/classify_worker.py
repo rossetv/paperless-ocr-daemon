@@ -369,9 +369,6 @@ def enrich_tags(
     base_tags = _dedupe_tags(tags)
     required_tags = []
 
-    if is_error_content(text, ERROR_PHRASES):
-        required_tags.append("ERROR")
-
     required_tags.extend(_extract_model_tags(text))
 
     year_tag = _extract_year(document_date) or dt.date.today().strftime("%Y")
@@ -737,11 +734,18 @@ class ClassificationProcessor:
             self._log_classification_stats()
 
     def _clean_processing_tags(self, tags: set[int]) -> set[int]:
-        """Remove OCR/classification processing tags and error tags."""
+        """
+        Remove pipeline tags (queue/processing/error tags).
+
+        This is used when we want to preserve user-assigned tags but ensure the
+        document does not remain stuck in the automation pipeline.
+        """
         updated = set(tags)
         updated.discard(self.settings.PRE_TAG_ID)
         updated.discard(self.settings.POST_TAG_ID)
         updated.discard(self.settings.CLASSIFY_PRE_TAG_ID)
+        if self.settings.OCR_PROCESSING_TAG_ID:
+            updated.discard(self.settings.OCR_PROCESSING_TAG_ID)
         if self.settings.CLASSIFY_PROCESSING_TAG_ID:
             updated.discard(self.settings.CLASSIFY_PROCESSING_TAG_ID)
         if self.settings.CLASSIFY_POST_TAG_ID:
@@ -807,11 +811,21 @@ class ClassificationProcessor:
 
     def _finalize_with_error(self, tags: set[int]) -> None:
         """Mark the document with an error tag and clear processing tags."""
-        if not self.settings.ERROR_TAG_ID:
-            log.warning("Error tag is not configured; skipping error tagging", doc_id=self.doc_id)
-            return
-        self._update_tags({self.settings.ERROR_TAG_ID})
-        log.warning("Marked document as classification error", doc_id=self.doc_id)
+        updated = self._clean_processing_tags(tags)
+        if self.settings.ERROR_TAG_ID:
+            updated.add(self.settings.ERROR_TAG_ID)
+        self._update_tags(updated)
+        if self.settings.ERROR_TAG_ID:
+            log.warning(
+                "Marked document as classification error",
+                doc_id=self.doc_id,
+                error_tag_id=self.settings.ERROR_TAG_ID,
+            )
+        else:
+            log.warning(
+                "Classification failed; removed pipeline tags (no error tag configured)",
+                doc_id=self.doc_id,
+            )
 
     def _apply_classification(
         self,
@@ -846,9 +860,6 @@ class ClassificationProcessor:
             self.settings.CLASSIFY_TAG_LIMIT,
         )
 
-        if self.settings.ERROR_TAG_ID:
-            tags = [tag for tag in tags if tag.strip().lower() != "error"]
-
         tag_ids = self.taxonomy_cache.get_or_create_tag_ids(tags)
         correspondent_id = (
             self.taxonomy_cache.get_or_create_correspondent_id(result.correspondent)
@@ -865,8 +876,6 @@ class ClassificationProcessor:
         if self.settings.CLASSIFY_POST_TAG_ID:
             current_tags.add(self.settings.CLASSIFY_POST_TAG_ID)
         current_tags.update(tag_ids)
-        if self.settings.ERROR_TAG_ID and error_required:
-            current_tags.add(self.settings.ERROR_TAG_ID)
 
         custom_fields = None
         if self.settings.CLASSIFY_PERSON_FIELD_ID and result.person:

@@ -13,9 +13,14 @@ Tag-driven flow (defaults shown):
 
 1) Paperless ingests a document and assigns the inbox tag `PRE_TAG_ID` (default `443`).
 2) OCR daemon processes documents with `PRE_TAG_ID`, uploads text, removes `PRE_TAG_ID`, and adds `POST_TAG_ID` (default `444`).
-3) Classification daemon processes documents with `CLASSIFY_PRE_TAG_ID` (defaults to `POST_TAG_ID`), updates metadata, then removes all pipeline tags.
+3) Classification daemon processes documents with `CLASSIFY_PRE_TAG_ID` (defaults to `POST_TAG_ID`), updates metadata, then removes the pipeline queue/processing tags.
 
-After classification, none of these three tags remain: `PRE_TAG_ID`, `POST_TAG_ID`, `ERROR_TAG_ID` (unless an error marker is detected or classification failed).
+On success, the queue tags are removed and the document is enriched with the classifier's tags/metadata.
+On failure (OCR refusal, redaction markers, invalid classification, etc.), the document is marked with `ERROR_TAG_ID` and removed from the queue.
+
+Non-pipeline (user) tags are preserved in both success and error paths.
+
+If a document somehow ends up with both a queue tag and its corresponding post-tag, the daemons will remove the stale queue tag to keep the pipeline moving.
 
 ## Quick start (Docker)
 
@@ -41,8 +46,10 @@ docker run -d --name paperless-classifier-daemon \
   -e CLASSIFY_PRE_TAG_ID="444" \
   -e CLASSIFY_DEFAULT_COUNTRY_TAG="Ireland" \
   rossetv/paperless-ocr-daemon:latest \
-  python3 -m src.paperless_ocr.classify_main
+  paperless-classifier-daemon
 ```
+
+You can also run the classifier with `python3 -m src.paperless_ocr.classify_main` if you prefer.
 
 If you use Ollama instead of OpenAI:
 
@@ -108,6 +115,8 @@ Notes:
 - A footer lists the models used for transcription.
 - Blank pages are skipped.
 - If all models fail or refuse, a refusal marker is inserted.
+- If OCR produces no text at all (e.g. all pages are blank), the document is marked with `ERROR_TAG_ID` to avoid a requeue loop.
+- If a page OCR call raises an unexpected exception, an `[OCR ERROR]` marker is inserted and the document is marked with `ERROR_TAG_ID`.
 - If `OCR_INCLUDE_PAGE_MODELS=true`, page headers include the model name (e.g., `--- Page 2 (gpt-5.2) ---`).
 - If `OCR_PROCESSING_TAG_ID` is set, the tag is added while OCR runs and removed when finished.
 
@@ -117,7 +126,7 @@ Notes:
 - Classification relies on `MAX_RETRIES` in the API client; if all models fail or return empty output, the document is marked with `ERROR_TAG_ID` and pipeline tags are removed.
 - If a document already has `ERROR_TAG_ID`, classification is skipped and pipeline tags are removed.
 - Page truncation uses the first `CLASSIFY_MAX_PAGES` pages plus the last `CLASSIFY_TAIL_PAGES` pages. If no page headers are present, it falls back to `CLASSIFY_HEADERLESS_CHAR_LIMIT`.
-- Required tags (year, country, model markers, error markers) are always included and do not count toward `CLASSIFY_TAG_LIMIT`.
+- Required tags (year, country, model markers) are always included and do not count toward `CLASSIFY_TAG_LIMIT`.
 - The prompt includes up to `CLASSIFY_TAXONOMY_LIMIT` correspondents, document types, and tags, sorted by usage.
 - If `CLASSIFY_PROCESSING_TAG_ID` is set, the tag is added while classification runs and removed when finished.
 
@@ -133,6 +142,7 @@ Notes:
 - `src/paperless_ocr/config.py` - configuration and validation.
 - `src/paperless_ocr/utils.py` - retry helper utilities.
 - `src/paperless_ocr/logging_config.py` - logging setup.
+- `src/paperless_ocr/daemon_loop.py` - shared polling loop used by both daemons.
 
 ## Runtime dependencies
 

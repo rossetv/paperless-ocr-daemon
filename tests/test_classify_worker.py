@@ -3,28 +3,23 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from paperless_ocr import classify_worker
 from paperless_ocr.classify_worker import (
     ClassificationProcessor,
     enrich_tags,
     truncate_content_by_pages,
-    _filter_redundant_tags,
     _filter_blacklisted_tags,
+    _filter_redundant_tags,
 )
 from paperless_ocr.classifier import ClassificationResult
 from paperless_ocr.config import Settings
 
 
 def test_enrich_tags_adds_required_tags():
-    text = (
-        "I'm sorry, I can't assist with that.\n"
-        "Transcribed by model: gpt-5-mini"
-    )
+    text = "Some content\n\nTranscribed by model: gpt-5-mini"
     tags = ["Bills"]
     result = enrich_tags(tags, text, "2024-03-01", "Ireland", 8)
 
     assert "bills" in result
-    assert "error" in result
     assert "gpt-5-mini" in result
     assert "2024" in result
     assert "ireland" in result
@@ -34,7 +29,9 @@ def test_enrich_tags_adds_error_for_redacted_marker():
     text = "Content [REDACTED NAME] with marker."
     result = enrich_tags([], text, "2024-03-01", "", 8)
 
-    assert "error" in result
+    # Error handling in the pipeline is done via ERROR_TAG_ID, not a free-form
+    # tag string (to avoid creating a new Paperless tag named "error").
+    assert "error" not in result
 
 
 def test_enrich_tags_trims_to_limit():
@@ -42,6 +39,7 @@ def test_enrich_tags_trims_to_limit():
     tags = ["Tag1", "Tag2", "Tag3", "Tag4", "Tag5", "Tag6", "Tag7", "Tag8"]
     result = enrich_tags(tags, text, "2024-01-01", "Ireland", 4)
 
+    # Required tags: model, year, country (3) + trimmed optional tags (4)
     assert len(result) == 7
     assert "gpt-5" in result
     assert "2024" in result
@@ -111,7 +109,7 @@ def test_classification_with_generic_document_type_marks_error(settings):
     paperless_client.update_document_metadata.assert_called_once()
     args, kwargs = paperless_client.update_document_metadata.call_args
     assert args[0] == 3
-    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID}
+    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID, 77}
 
 
 def test_truncate_content_by_pages_limits_pages_and_keeps_footer():
@@ -234,7 +232,7 @@ def test_skips_classification_when_error_tag_present(settings):
     paperless_client.update_document_metadata.assert_called_once()
     args, kwargs = paperless_client.update_document_metadata.call_args
     assert args[0] == 1
-    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID}
+    assert set(kwargs["tags"]) == {settings.ERROR_TAG_ID, 99}
     classifier.classify_text.assert_not_called()
 
 
