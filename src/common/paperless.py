@@ -18,7 +18,7 @@ import requests
 import structlog
 
 from .config import Settings
-from .utils import retry
+from .retry import retry
 
 log = structlog.get_logger(__name__)
 

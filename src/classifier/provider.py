@@ -96,20 +96,39 @@ class ClassificationProvider(OpenAIChatMixin):
     # Compatibility wrapper
     # ------------------------------------------------------------------
 
+    # Maximum number of compatibility retries before giving up.  There are
+    # at most three strippable parameters (temperature, response_format,
+    # max_tokens), so 3 is the theoretical maximum.
+    _MAX_COMPAT_RETRIES: int = 3
+
     def _create_with_compat(self, params: dict, model: str):
-        """
-        Call the chat completion API, retrying after stripping unsupported params.
+        """Call the chat completion API, retrying after stripping unsupported params.
 
         Ollama and some OpenAI models reject parameters they don't understand
         (``temperature``, ``response_format``, ``max_tokens``).  When we get a
         ``400 Bad Request`` whose message names the offending parameter, we
-        remove it and retry the same model — up to one retry per parameter.
+        remove it and retry the same model — up to one retry per parameter,
+        bounded by :attr:`_MAX_COMPAT_RETRIES` to avoid infinite loops.
+
+        Args:
+            params: Keyword arguments for the chat completion call.
+            model: Model name (for logging context).
+
+        Returns:
+            The API response, or ``None`` if all attempts fail.
         """
+        compat_retries = 0
         while True:
             try:
                 self._stats["attempts"] += 1
                 return self._create_completion(**params)
             except openai.BadRequestError as e:
+                if compat_retries >= self._MAX_COMPAT_RETRIES:
+                    log.warning(
+                        "Max compat retries reached", model=model, error=e,
+                    )
+                    self._stats["api_errors"] += 1
+                    return None
                 if self._is_temperature_error(e) and "temperature" in params:
                     log.warning(
                         "Model does not support temperature; retrying with defaults",
@@ -118,6 +137,7 @@ class ClassificationProvider(OpenAIChatMixin):
                     self._stats["temperature_retries"] += 1
                     params = dict(params)
                     params.pop("temperature", None)
+                    compat_retries += 1
                     continue
                 if self._is_response_format_error(e) and "response_format" in params:
                     log.warning(
@@ -127,6 +147,7 @@ class ClassificationProvider(OpenAIChatMixin):
                     self._stats["response_format_retries"] += 1
                     params = dict(params)
                     params.pop("response_format", None)
+                    compat_retries += 1
                     continue
                 if self._is_max_tokens_error(e) and "max_tokens" in params:
                     log.warning(
@@ -136,6 +157,7 @@ class ClassificationProvider(OpenAIChatMixin):
                     self._stats["max_tokens_retries"] += 1
                     params = dict(params)
                     params.pop("max_tokens", None)
+                    compat_retries += 1
                     continue
                 log.warning("Classification request rejected", model=model, error=e)
                 self._stats["api_errors"] += 1
