@@ -1,11 +1,12 @@
 """
 OCR domain package.
 
-This package contains:
-
-- the OCR provider abstraction and implementations
-- the OCR worker that processes a single Paperless document
-- the long-running OCR daemon entrypoint
+Modules
+-------
+- **provider** — :class:`OcrProvider` ABC and :class:`OpenAIProvider` implementation.
+- **worker** — :class:`DocumentProcessor` orchestrating single-document OCR.
+- **daemon** — long-running OCR daemon entry point.
+- **prompts** — the system prompt sent to the vision-capable LLM.
 """
 
 from .provider import OcrProvider, OpenAIProvider
@@ -16,4 +17,3 @@ __all__ = [
     "OcrProvider",
     "OpenAIProvider",
 ]
-

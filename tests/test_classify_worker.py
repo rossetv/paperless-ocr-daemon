@@ -3,14 +3,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from classifier.worker import (
-    ClassificationProcessor,
+from classifier.content_prep import truncate_content_by_pages
+from classifier.result import ClassificationResult
+from classifier.tag_filters import (
     enrich_tags,
-    truncate_content_by_pages,
-    _filter_blacklisted_tags,
-    _filter_redundant_tags,
+    filter_blacklisted_tags,
+    filter_redundant_tags,
 )
-from classifier.provider import ClassificationResult
+from classifier.worker import ClassificationProcessor
 from common.config import Settings
 
 
@@ -56,7 +56,7 @@ def test_enrich_tags_extracts_multiple_models():
 
 def test_filter_redundant_tags_drops_correspondent_and_type_and_person():
     tags = ["Revolut", "Bank Statement", "Vilmar Henrique Rosset", "Bills"]
-    filtered = _filter_redundant_tags(
+    filtered = filter_redundant_tags(
         tags,
         correspondent="Revolut Ltd",
         document_type="Bank Statement",
@@ -68,7 +68,7 @@ def test_filter_redundant_tags_drops_correspondent_and_type_and_person():
 
 def test_filter_blacklisted_tags_drops_blocked_names():
     tags = ["New", "AI", "Error", "Indexed", "Bills"]
-    filtered = _filter_blacklisted_tags(tags)
+    filtered = filter_blacklisted_tags(tags)
 
     assert filtered == ["Bills"]
 

@@ -1,3 +1,19 @@
+"""
+Logging Configuration
+=====================
+
+Configures :mod:`structlog` and the standard-library :mod:`logging` root logger
+for structured, context-rich output.
+
+Two rendering modes are supported (chosen by ``settings.LOG_FORMAT``):
+
+- **console** — coloured, human-readable key=value pairs (good for local dev).
+- **json** — one JSON object per line (good for log aggregation in production).
+
+Noisy third-party loggers (``httpx``, ``openai``) are suppressed to ``WARNING``
+so they don't drown out application logs.
+"""
+
 import logging
 import sys
 import structlog
@@ -5,13 +21,15 @@ import structlog
 from .config import Settings
 
 
-def configure_logging(settings: Settings):
+def configure_logging(settings: Settings) -> None:
     """
-    Configures logging for the application.
+    Set up structured logging for both structlog and stdlib loggers.
 
-    This function sets up structlog to provide structured logging, with
-    processors that add context and render logs in either a human-readable
-    console format or a machine-readable JSON format.
+    Must be called once at daemon startup, before any log output.
+
+    - Adds ISO timestamps, log level, and logger name to every event.
+    - Routes stdlib ``logging`` records through the structlog formatter.
+    - Suppresses noisy third-party loggers.
     """
     shared_processors = [
         structlog.contextvars.merge_contextvars,

@@ -1,15 +1,14 @@
 """
-Utilities
-=========
+Shared Utilities
+================
 
-This module provides utility functions and classes that are used across
-the application but do not belong to a more specific domain like the
-Paperless-ngx client or the OCR logic.
+Domain-agnostic helpers used throughout both daemons:
 
-Currently, it contains a robust `retry` decorator for handling transient
-errors with exponential backoff and jitter, as well as a helper for
-detecting blank images. These utilities help to improve the resilience
-and efficiency of the daemon.
+- :func:`retry` — decorator for transient-error resilience with exponential
+  backoff, jitter, and a configurable cap.
+- :func:`is_blank` — detects near-white images that should be skipped by OCR.
+- :func:`contains_redacted_marker` — detects ``[REDACTED …]`` markers in text.
+- :func:`is_error_content` — combines refusal-phrase and redaction detection.
 """
 
 from __future__ import annotations
@@ -98,9 +97,12 @@ def _sleep_backoff(attempt: int, settings: RetrySettings) -> None:
 
 def is_blank(image: Image.Image, threshold: int = 5) -> bool:
     """
-    Return True if the image is essentially blank (all white).
+    Return ``True`` if the image is essentially blank (all white).
+
+    Converts to greyscale and checks that the number of non-white pixels
+    is below *threshold*.  Used by the OCR provider to skip blank pages
+    without wasting an API call.
     """
-    # Greyscale histogram - index 255 is pure white
     histogram = image.convert("L").histogram()
     return (sum(histogram) - histogram[255]) < threshold
 
@@ -116,7 +118,10 @@ def contains_redacted_marker(text: str) -> bool:
 
 def is_error_content(text: str, error_phrases: Iterable[str]) -> bool:
     """
-    Return True if the text contains refusal phrases or redaction markers.
+    Return ``True`` if *text* contains any refusal phrase or redaction marker.
+
+    Used by the classification pipeline to detect OCR output that was stored
+    as document content but actually represents a model refusal.
     """
     text_lower = text.lower()
     return contains_redacted_marker(text) or any(

@@ -4,10 +4,8 @@ import httpx
 import openai
 import pytest
 
-from classifier.provider import (
-    ClassificationProvider,
-    parse_classification_response,
-)
+from classifier.provider import ClassificationProvider
+from classifier.result import parse_classification_response
 from common.config import Settings
 
 
