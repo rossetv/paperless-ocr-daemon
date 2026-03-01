@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 from common.config import Settings
-from ocr.provider import OpenAIProvider, _is_refusal
+from ocr.provider import OpenAIProvider, is_refusal
 
 
 @pytest.fixture
@@ -130,12 +130,19 @@ def test_transcribe_blank_image(ocr_provider, mock_create_completion):
 
 
 def test_is_refusal_detection():
-    assert _is_refusal("I can't assist with that.")
-    assert _is_refusal("I CAN'T ASSIST")
-    assert _is_refusal("EMP. NAME [REDACTED NAME]")
-    assert _is_refusal("[NAME REDACTED]")
-    assert _is_refusal("Sorry, I can't help with transcribing this document.")
-    assert not _is_refusal("This is a normal response.")
+    markers = [
+        "i can't assist",
+        "i cannot assist",
+        "i can't help with transcrib",
+        "i cannot help with transcrib",
+        "chatgpt refused to transcribe",
+    ]
+    assert is_refusal("I can't assist with that.", markers)
+    assert is_refusal("I CAN'T ASSIST", markers)
+    assert is_refusal("EMP. NAME [REDACTED NAME]", markers)
+    assert is_refusal("[NAME REDACTED]", markers)
+    assert is_refusal("Sorry, I can't help with transcribing this document.", markers)
+    assert not is_refusal("This is a normal response.", markers)
 
 
 def test_transcribe_image_resizes_image(ocr_provider, mock_create_completion, mocker):

@@ -2,8 +2,11 @@
 Paperless-ngx Classification Daemon
 ===================================
 
-This script polls Paperless-ngx for documents tagged after OCR and
-classifies them using an LLM, applying metadata updates and tags.
+Entry point for the classification daemon.
+
+Polls Paperless-ngx for documents that have been OCR'd (tagged with
+``CLASSIFY_PRE_TAG_ID``) and classifies them using an LLM, applying metadata
+updates (title, correspondent, document type, tags, date, language, person).
 """
 
 from __future__ import annotations
@@ -16,8 +19,10 @@ from common.config import Settings, setup_libraries
 from common.daemon_loop import run_polling_threadpool
 from common.logging_config import configure_logging
 from common.paperless import PaperlessClient
+from common.tags import extract_tags, remove_stale_queue_tag
 from .provider import ClassificationProvider
-from .worker import ClassificationProcessor, TaxonomyCache
+from .taxonomy import TaxonomyCache
+from .worker import ClassificationProcessor
 
 
 def _iter_docs_to_classify(
@@ -26,9 +31,10 @@ def _iter_docs_to_classify(
     """
     Yield documents that should be classified.
 
-    If ``CLASSIFY_POST_TAG_ID`` is configured and a document already has it,
-    classification is skipped and we remove the stale pre-tag so the document
-    stops re-appearing in the queue.
+    Tag hygiene: if a document already has the classify-post-tag but still
+    carries the classify-pre-tag, the stale tags are removed and the document
+    is skipped.  Documents already claimed by a processing-lock tag are also
+    skipped.
     """
     log = structlog.get_logger(__name__)
     for doc in list_client.get_documents_by_tag(settings.CLASSIFY_PRE_TAG_ID):
@@ -37,32 +43,21 @@ def _iter_docs_to_classify(
             log.warning("Skipping document without integer id", doc_id=doc_id)
             continue
 
-        tags_raw = doc.get("tags", []) or []
-        tags = set(tags_raw if isinstance(tags_raw, list) else [])
+        tags = extract_tags(doc, doc_id=doc_id, context="classify-iter")
 
+        # Already classified — remove stale queue and processing tags
         if settings.CLASSIFY_POST_TAG_ID and settings.CLASSIFY_POST_TAG_ID in tags:
             if settings.CLASSIFY_PRE_TAG_ID in tags:
-                tags.discard(settings.CLASSIFY_PRE_TAG_ID)
-                if settings.CLASSIFY_PROCESSING_TAG_ID:
-                    tags.discard(settings.CLASSIFY_PROCESSING_TAG_ID)
-                try:
-                    list_client.update_document_metadata(doc_id, tags=list(tags))
-                except Exception:
-                    log.exception(
-                        "Failed to remove stale classify-pre tag from already processed document",
-                        doc_id=doc_id,
-                        classify_pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
-                        classify_post_tag_id=settings.CLASSIFY_POST_TAG_ID,
-                    )
-                else:
-                    log.info(
-                        "Removed stale classify-pre tag from already processed document",
-                        doc_id=doc_id,
-                        classify_pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
-                        classify_post_tag_id=settings.CLASSIFY_POST_TAG_ID,
-                    )
+                remove_stale_queue_tag(
+                    list_client,
+                    doc_id,
+                    tags,
+                    pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
+                    processing_tag_id=settings.CLASSIFY_PROCESSING_TAG_ID,
+                )
             continue
 
+        # Already claimed by another worker
         if (
             settings.CLASSIFY_PROCESSING_TAG_ID
             and settings.CLASSIFY_PROCESSING_TAG_ID in tags
@@ -73,7 +68,12 @@ def _iter_docs_to_classify(
 
 
 def main() -> None:
-    """Main loop for the classification daemon."""
+    """
+    Bootstrap and run the classification daemon.
+
+    Loads settings, configures logging and LLM libraries, creates a shared
+    :class:`TaxonomyCache`, then enters the polling loop.
+    """
     log = structlog.get_logger(__name__)
 
     try:
@@ -104,11 +104,7 @@ def main() -> None:
         classifier = ClassificationProvider(settings)
         try:
             processor = ClassificationProcessor(
-                doc,
-                paperless,
-                classifier,
-                taxonomy_cache,
-                settings,
+                doc, paperless, classifier, taxonomy_cache, settings,
             )
             processor.process()
         finally:

@@ -29,3 +29,14 @@ class OpenAIChatMixin:
     def _create_completion(self, **kwargs):
         """Call the OpenAI-compatible chat completion API with retries."""
         return openai.chat.completions.create(**kwargs)
+
+
+def unique_models(models: list[str]) -> list[str]:
+    """Deduplicate a model list while preserving insertion order."""
+    seen: set[str] = set()
+    unique: list[str] = []
+    for model in models:
+        if model not in seen:
+            seen.add(model)
+            unique.append(model)
+    return unique

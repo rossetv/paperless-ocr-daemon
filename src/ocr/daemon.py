@@ -2,20 +2,21 @@
 Paperless-ngx AI OCR Daemon
 ===========================
 
-This module is the entry point for the OCR daemon.
+Entry point for the OCR daemon.
 
 High-level behaviour
 --------------------
 
 1. Poll Paperless-ngx for documents with the *OCR queue tag* (``PRE_TAG_ID``).
 2. For each queued document:
+
    - Download the original file.
    - Convert the file to images (PDF pages or image frames).
    - Transcribe each page using a vision-capable LLM.
    - Upload the transcription back to Paperless (``content`` field).
    - Update tags to move the document through the pipeline.
 
-The exact tags are configured via environment variables (see ``Settings``).
+The exact tags are configured via environment variables (see :class:`Settings`).
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from common.config import Settings, setup_libraries
 from common.daemon_loop import run_polling_threadpool
 from common.logging_config import configure_logging
 from common.paperless import PaperlessClient
+from common.tags import extract_tags, remove_stale_queue_tag
 from .provider import OpenAIProvider
 from .worker import DocumentProcessor
 
@@ -36,19 +38,13 @@ def _process_document(doc: dict, settings: Settings) -> None:
     """
     Process a single Paperless document.
 
-    The daemon runs multiple documents concurrently; each document gets its own
-    Paperless HTTP session. The OCR provider instance is shared across pages
-    within the document (pages are processed in parallel).
+    Each document gets its own HTTP session and OCR provider instance.
+    The daemon runs multiple documents concurrently via the thread pool.
     """
     paperless = PaperlessClient(settings)
     ocr_provider = OpenAIProvider(settings)
     try:
-        processor = DocumentProcessor(
-            doc,
-            paperless,
-            ocr_provider,
-            settings,
-        )
+        processor = DocumentProcessor(doc, paperless, ocr_provider, settings)
         processor.process()
     finally:
         paperless.close()
@@ -58,13 +54,10 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
     """
     Yield documents that should be OCR'd.
 
-    Notes on tag hygiene
-    --------------------
-
-    Paperless queries here are tag-based (``tags__id=<PRE_TAG_ID>``). If a
-    document somehow has both the pre-tag and post-tag, OCR is skipped (to avoid
-    repeated OCR cost) and we remove the stale pre-tag so it stops re-appearing
-    in the queue.
+    Tag hygiene: if a document already has the post-tag but still carries the
+    pre-tag, the stale pre-tag is removed and the document is skipped.
+    Documents that already have the processing-lock tag are also skipped to
+    reduce duplicate work.
     """
     log = structlog.get_logger(__name__)
     for doc in list_client.get_documents_by_tag(settings.PRE_TAG_ID):
@@ -73,34 +66,21 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
             log.warning("Skipping document without integer id", doc_id=doc_id)
             continue
 
-        tags_raw = doc.get("tags", []) or []
-        tags = set(tags_raw if isinstance(tags_raw, list) else [])
+        tags = extract_tags(doc, doc_id=doc_id, context="ocr-iter")
 
-        # If a document has both the "queued" tag and the "processed" tag, treat it
-        # as already processed and remove the stale queue tag.
+        # Already processed — remove the stale queue tag
         if settings.POST_TAG_ID in tags:
             if settings.PRE_TAG_ID in tags:
-                tags.discard(settings.PRE_TAG_ID)
-                try:
-                    list_client.update_document_metadata(doc_id, tags=list(tags))
-                except Exception:
-                    log.exception(
-                        "Failed to remove stale pre-tag from already processed document",
-                        doc_id=doc_id,
-                        pre_tag_id=settings.PRE_TAG_ID,
-                        post_tag_id=settings.POST_TAG_ID,
-                    )
-                else:
-                    log.info(
-                        "Removed stale pre-tag from already processed document",
-                        doc_id=doc_id,
-                        pre_tag_id=settings.PRE_TAG_ID,
-                        post_tag_id=settings.POST_TAG_ID,
-                    )
+                remove_stale_queue_tag(
+                    list_client,
+                    doc_id,
+                    tags,
+                    pre_tag_id=settings.PRE_TAG_ID,
+                    processing_tag_id=settings.OCR_PROCESSING_TAG_ID,
+                )
             continue
 
-        # If configured, the processing tag acts as a best-effort lock. We skip
-        # documents that are already claimed to reduce duplicate work.
+        # Already claimed by another worker
         if settings.OCR_PROCESSING_TAG_ID and settings.OCR_PROCESSING_TAG_ID in tags:
             continue
 
@@ -109,10 +89,10 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
 
 def main() -> None:
     """
-    The main loop of the daemon.
+    Bootstrap and run the OCR daemon.
 
-    This function continuously polls Paperless-ngx for new documents to process,
-    and then hands them off to a `DocumentProcessor` instance.
+    Loads settings, configures logging and LLM libraries, then enters the
+    polling loop that dispatches documents to worker threads.
     """
     log = structlog.get_logger(__name__)
 

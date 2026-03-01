@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock
 
-from classifier.worker import TaxonomyCache
+from classifier.taxonomy import TaxonomyCache
 
 
 def test_taxonomy_cache_refresh_and_lookup_existing_items():
