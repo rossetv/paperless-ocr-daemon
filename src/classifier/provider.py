@@ -20,7 +20,7 @@ import openai
 import structlog
 
 from common.config import Settings
-from common.llm import OpenAIChatMixin
+from common.llm import OpenAIChatMixin, unique_models
 from .prompts import (
     CLASSIFICATION_JSON_SCHEMA,
     CLASSIFICATION_PROMPT,
@@ -176,7 +176,7 @@ class ClassificationProvider(OpenAIChatMixin):
             {"role": "user", "content": user_content},
         ]
 
-        models_to_try = _unique_models(self.settings.AI_MODELS)
+        models_to_try = unique_models(self.settings.AI_MODELS)
         primary_model = models_to_try[0] if models_to_try else ""
 
         for model in models_to_try:
@@ -265,16 +265,3 @@ class ClassificationProvider(OpenAIChatMixin):
         return params
 
 
-# ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
-
-def _unique_models(models: list[str]) -> list[str]:
-    """Deduplicate a model list while preserving order."""
-    seen: set[str] = set()
-    unique: list[str] = []
-    for model in models:
-        if model not in seen:
-            seen.add(model)
-            unique.append(model)
-    return unique

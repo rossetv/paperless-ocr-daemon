@@ -118,7 +118,9 @@ def is_empty_classification(result: ClassificationResult) -> bool:
     A result is "empty" when every scalar field is blank and the tag list
     contains no non-whitespace entries.
     """
-    if result.tags and any(tag.strip() for tag in result.tags):
+    if result.tags and any(
+        tag.strip() for tag in result.tags if isinstance(tag, str)
+    ):
         return False
     fields = [
         result.title,
@@ -128,4 +130,4 @@ def is_empty_classification(result: ClassificationResult) -> bool:
         result.language,
         result.person,
     ]
-    return not any(field.strip() for field in fields)
+    return not any((field or "").strip() for field in fields)

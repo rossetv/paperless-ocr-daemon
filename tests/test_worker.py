@@ -207,7 +207,7 @@ def test_assemble_full_text_skips_blank_pages(settings, mock_doc):
         ("Page 3 text", "model-b"),
     ]
 
-    full_text, models_used = processor._assemble_full_text(images, page_results)
+    full_text, models_used = processor._assemble_full_text(len(images), page_results)
 
     expected = (
         "--- Page 1 ---\n"
@@ -232,7 +232,7 @@ def test_assemble_full_text_includes_page_models(settings, mock_doc):
         ("Page 2 text", ""),
     ]
 
-    full_text, models_used = processor._assemble_full_text(images, page_results)
+    full_text, models_used = processor._assemble_full_text(len(images), page_results)
 
     expected = (
         "--- Page 1 (model-a) ---\n"

@@ -76,6 +76,7 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
                     doc_id,
                     tags,
                     pre_tag_id=settings.PRE_TAG_ID,
+                    processing_tag_id=settings.OCR_PROCESSING_TAG_ID,
                 )
             continue
 

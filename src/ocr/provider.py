@@ -23,7 +23,7 @@ import structlog
 from PIL import Image
 
 from common.config import Settings
-from common.llm import OpenAIChatMixin
+from common.llm import OpenAIChatMixin, unique_models
 from common.utils import contains_redacted_marker, is_blank
 from .prompts import TRANSCRIPTION_PROMPT
 
@@ -130,7 +130,7 @@ class OpenAIProvider(OpenAIChatMixin, OcrProvider):
             },
         ]
 
-        models_to_try = _unique_models(self.settings.AI_MODELS)
+        models_to_try = unique_models(self.settings.AI_MODELS)
         primary_model = models_to_try[0] if models_to_try else ""
 
         for model in models_to_try:
@@ -142,7 +142,7 @@ class OpenAIProvider(OpenAIChatMixin, OcrProvider):
             try:
                 self._stats["attempts"] += 1
                 response = self._create_completion(**params)
-                text = response.choices[0].message.content.strip()
+                text = (response.choices[0].message.content or "").strip()
 
                 if not is_refusal(text, self.settings.OCR_REFUSAL_MARKERS):
                     if model != primary_model:
@@ -176,12 +176,3 @@ def _image_to_base64_png(image: Image.Image) -> str:
     return base64.b64encode(buffer.getvalue()).decode()
 
 
-def _unique_models(models: list[str]) -> list[str]:
-    """Deduplicate a model list while preserving order."""
-    seen: set[str] = set()
-    unique: list[str] = []
-    for model in models:
-        if model not in seen:
-            seen.add(model)
-            unique.append(model)
-    return unique

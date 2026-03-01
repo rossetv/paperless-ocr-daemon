@@ -91,7 +91,15 @@ class DocumentProcessor:
                 return
 
             content, content_type = self.paperless_client.download_content(self.doc_id)
-            images = self._bytes_to_images(content, content_type)
+            try:
+                images = self._bytes_to_images(content, content_type)
+            except RuntimeError:
+                log.exception(
+                    "Unable to convert document to images; marking error",
+                    doc_id=self.doc_id,
+                )
+                self._finalize_with_error(current_tags)
+                return
 
             if not images:
                 log.warning("Document has no pages to process", doc_id=self.doc_id)
@@ -113,7 +121,7 @@ class DocumentProcessor:
                     failed_pages=failed_pages,
                 )
 
-            full_text, models_used = self._assemble_full_text(images, page_results)
+            full_text, models_used = self._assemble_full_text(len(images), page_results)
             self._update_paperless_document(full_text, models_used)
         finally:
             if claimed:
@@ -232,7 +240,7 @@ class DocumentProcessor:
     # ------------------------------------------------------------------
 
     def _assemble_full_text(
-        self, images: list[Image.Image], page_results: list[tuple[str, str]]
+        self, page_count: int, page_results: list[tuple[str, str]]
     ) -> tuple[str, set[str]]:
         """
         Combine per-page OCR results into a single document text.
@@ -245,7 +253,7 @@ class DocumentProcessor:
         for i, (text, model) in enumerate(page_results, 1):
             if text.strip():
                 header = ""
-                if len(images) > 1:
+                if page_count > 1:
                     header = f"--- Page {i}"
                     if self.settings.OCR_INCLUDE_PAGE_MODELS and model:
                         header += f" ({model})"

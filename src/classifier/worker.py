@@ -26,6 +26,7 @@ from common.config import Settings
 from common.paperless import PaperlessClient
 from common.tags import clean_pipeline_tags, release_processing_tag
 from .content_prep import (
+    truncate_content_by_chars,
     truncate_content_by_pages,
     max_char_truncation_note,
 )
@@ -98,7 +99,7 @@ class ClassificationProcessor:
         try:
             document = self.paperless_client.get_document(self.doc_id)
             content = document.get("content", "") or ""
-            current_tags = set(document.get("tags", []))
+            current_tags = set(document.get("tags") or [])
 
             if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in current_tags:
                 log.warning(
@@ -184,12 +185,14 @@ class ClassificationProcessor:
                     tail_pages=self.settings.CLASSIFY_TAIL_PAGES,
                 )
 
-        # Character-based truncation (hard cap)
+        # Character-based truncation (hard cap, preserves footer)
         if (
             self.settings.CLASSIFY_MAX_CHARS > 0
             and len(input_text) > self.settings.CLASSIFY_MAX_CHARS
         ):
-            input_text = input_text[: self.settings.CLASSIFY_MAX_CHARS]
+            input_text = truncate_content_by_chars(
+                input_text, self.settings.CLASSIFY_MAX_CHARS
+            )
             truncation_notes.append(
                 max_char_truncation_note(self.settings.CLASSIFY_MAX_CHARS)
             )
