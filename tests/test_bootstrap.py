@@ -55,16 +55,31 @@ def test_bootstrap_success(
     mock_stale.assert_called_once()
 
 
-@patch("common.bootstrap.configure_logging", side_effect=ValueError("bad config"))
-def test_bootstrap_config_error(mock_logging):
-    """ValueError during Settings/logging → returns None."""
-    # Patch Settings to raise
+@patch("common.bootstrap.configure_logging")
+def test_bootstrap_returns_none_on_settings_error(mock_logging):
+    """ValueError from Settings() → returns None without creating a client."""
     with patch("common.bootstrap.Settings", side_effect=ValueError("bad")):
         result = bootstrap_daemon(
             processing_tag_id_attr="OCR_PROCESSING_TAG_ID",
             pre_tag_id_attr="PRE_TAG_ID",
         )
     assert result is None
+    mock_logging.assert_not_called()
+
+
+@patch("common.bootstrap.PaperlessClient")
+@patch("common.bootstrap.setup_libraries")
+@patch("common.bootstrap.configure_logging", side_effect=ValueError("bad log level"))
+def test_bootstrap_returns_none_on_logging_error(mock_logging, mock_libraries, mock_client_cls):
+    """ValueError from configure_logging() → returns None without creating a client."""
+    result = bootstrap_daemon(
+        processing_tag_id_attr="OCR_PROCESSING_TAG_ID",
+        pre_tag_id_attr="PRE_TAG_ID",
+    )
+    assert result is None
+    mock_logging.assert_called_once()
+    mock_libraries.assert_not_called()
+    mock_client_cls.assert_not_called()
 
 
 @patch("common.bootstrap.recover_stale_locks")

@@ -148,7 +148,12 @@ class TaxonomyCache:
         self._correspondent_map: dict[str, dict] = {}
         self._document_type_map: dict[str, dict] = {}
         self._tag_map: dict[str, dict] = {}
-        # Cached sorted name lists — rebuilt during refresh()
+        # Cached sorted name lists — rebuilt during refresh().
+        # Note: get_or_create_*() updates _*_map for lookups but does NOT
+        # invalidate these caches; newly created items only appear after the
+        # next refresh() call (i.e. at the start of the next polling batch).
+        # This is acceptable because the cache is only used for LLM prompt
+        # context, and the actual taxonomy resolution uses _*_map directly.
         self._cached_correspondent_names: list[str] = []
         self._cached_document_type_names: list[str] = []
         self._cached_tag_names: list[str] = []

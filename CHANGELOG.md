@@ -10,8 +10,8 @@ All notable changes to this project will be documented in this file.
 - `ARCHITECTURE.md` — Target architecture and module design document.
 - `CHANGELOG.md` — This changelog file.
 - `common.bootstrap` module — Shared daemon startup sequence extracted from
-  `ocr.daemon.main()` and `classifier.daemon.main()`, eliminating ~40 lines
-  of duplicated bootstrap code.
+  `ocr.daemon.main()` and `classifier.daemon.main()`, eliminating duplicate
+  bootstrap code.
 - `Settings._get_optional_positive_int_env()` — Reusable helper for tag ID
   env vars that treats values <= 0 as `None`.
 - Thread-safe stats in `ocr.provider.OpenAIProvider` — `_inc_stat()` with
