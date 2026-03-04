@@ -1,6 +1,7 @@
 """Extended tests for common.daemon_loop — idle states and error recovery."""
 
 from common.daemon_loop import _safe_item_summary, run_polling_threadpool
+from common.shutdown import request_shutdown, reset_shutdown
 
 
 def test_idle_logging_only_once():
@@ -130,3 +131,33 @@ def test_safe_item_summary_unprintable():
             raise RuntimeError("boom")
 
     assert _safe_item_summary(BadObj()) == "<unprintable>"
+
+
+# ---------------------------------------------------------------------------
+# Graceful shutdown via shutdown flag
+# ---------------------------------------------------------------------------
+
+
+def test_shutdown_flag_stops_loop():
+    """When shutdown is requested, the loop exits without processing more items."""
+    reset_shutdown()
+    processed = []
+
+    def fetch_work():
+        return [1] if not processed else []
+
+    def sleep(_seconds):
+        # Request shutdown during the sleep after the first batch
+        request_shutdown()
+
+    run_polling_threadpool(
+        daemon_name="test",
+        fetch_work=fetch_work,
+        process_item=lambda item: processed.append(item),
+        poll_interval_seconds=1,
+        max_workers=1,
+        sleep=sleep,
+    )
+
+    assert processed == [1]
+    reset_shutdown()
