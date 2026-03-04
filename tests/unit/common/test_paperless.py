@@ -35,11 +35,34 @@ def _make_settings(**overrides):
     return make_settings_obj(**defaults)
 
 
+_active_clients: list[PaperlessClient] = []
+
+
 def _make_client(settings=None):
-    """Create a PaperlessClient with test settings."""
+    """Create a PaperlessClient with test settings.
+
+    All clients created via this helper are automatically closed after each
+    test by the ``_auto_close_clients`` fixture, ensuring no resource leaks
+    even when assertions fail.
+    """
     if settings is None:
         settings = _make_settings()
-    return PaperlessClient(settings)
+    c = PaperlessClient(settings)
+    _active_clients.append(c)
+    return c
+
+
+@pytest.fixture(autouse=True)
+def _auto_close_clients():
+    """Guarantee every PaperlessClient created during a test is closed."""
+    _active_clients.clear()
+    yield
+    for c in _active_clients:
+        try:
+            c.close()
+        except Exception:
+            pass
+    _active_clients.clear()
 
 
 # ---------------------------------------------------------------------------

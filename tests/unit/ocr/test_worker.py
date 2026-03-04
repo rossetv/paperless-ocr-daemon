@@ -120,13 +120,20 @@ class TestProcessHappyPath:
         # Act
         proc.process()
 
-        # Assert
+        # Assert — full pipeline invoked with correct data flow
         mock_claim.assert_called_once()
         paperless.download_content.assert_called_once_with(1)
         mock_b2i.assert_called_once()
         mock_assemble.assert_called_once()
-        paperless.update_document.assert_called_once()
         mock_release.assert_called_once()
+        # Verify update_document called with correct content and tags
+        paperless.update_document.assert_called_once()
+        call_args = paperless.update_document.call_args[0]
+        assert call_args[0] == 1  # doc_id
+        assert "Full text" in call_args[1]  # OCR text
+        tags = call_args[2]
+        assert 444 in tags  # POST_TAG_ID added
+        assert 443 not in tags  # PRE_TAG_ID removed
 
 
 # -----------------------------------------------------------------------
@@ -174,9 +181,11 @@ class TestProcessErrorTagPresent:
         # Act
         proc.process()
 
-        # Assert — claim never called, finalize_with_error called
+        # Assert — claim never called, finalize_with_error called via clean_pipeline_tags
         mock_claim.assert_not_called()
         paperless.download_content.assert_not_called()
+        mock_clean.assert_called_once()
+        paperless.update_document_metadata.assert_called_once()
 
 
 # -----------------------------------------------------------------------
@@ -311,8 +320,8 @@ class TestBytesToImages:
 
 class TestOcrPagesInParallel:
     def test_preserves_page_order(self):
-        # Arrange
-        settings = _make_settings(PAGE_WORKERS=2)
+        # Arrange — single worker for deterministic side_effect ordering
+        settings = _make_settings(PAGE_WORKERS=1)
         ocr_provider = _make_mock_ocr_provider()
         ocr_provider.transcribe_image.side_effect = [
             ("Text page 1", "m"),
@@ -325,13 +334,12 @@ class TestOcrPagesInParallel:
         # Act
         results, failed = proc._ocr_pages_in_parallel(images)
 
-        # Assert
+        # Assert — correct count, no failures, and content in correct order
         assert len(results) == 3
         assert failed == []
-        # Results should be tuples
-        for r in results:
-            assert isinstance(r, tuple)
-            assert len(r) == 2
+        assert results[0] == ("Text page 1", "m")
+        assert results[1] == ("Text page 2", "m")
+        assert results[2] == ("Text page 3", "m")
 
     def test_handles_ocr_exception_per_page(self):
         # Arrange
@@ -590,7 +598,8 @@ class TestFinalizeWithError:
 # -----------------------------------------------------------------------
 
 class TestLogOcrStats:
-    def test_normal_stats_logged(self):
+    @patch("ocr.worker.log")
+    def test_normal_stats_logged(self, mock_log):
         # Arrange
         ocr_provider = _make_mock_ocr_provider()
         ocr_provider.get_stats.return_value = {
@@ -601,13 +610,17 @@ class TestLogOcrStats:
         }
         proc = _make_processor(ocr_provider=ocr_provider)
 
-        # Act — should not raise
+        # Act
         proc._log_ocr_stats()
 
-        # Assert
+        # Assert — stats fetched and logged
         ocr_provider.get_stats.assert_called_once()
+        mock_log.info.assert_called_once()
+        log_kwargs = mock_log.info.call_args.kwargs
+        assert log_kwargs["attempts"] == 5
 
-    def test_zero_attempts_not_logged(self):
+    @patch("ocr.worker.log")
+    def test_zero_attempts_not_logged(self, mock_log):
         # Arrange — get_stats returns 0 attempts
         ocr_provider = _make_mock_ocr_provider()
         ocr_provider.get_stats.return_value = {
@@ -618,11 +631,12 @@ class TestLogOcrStats:
         }
         proc = _make_processor(ocr_provider=ocr_provider)
 
-        # Act — should not raise, just return early
+        # Act — should return early without logging
         proc._log_ocr_stats()
 
-        # Assert
+        # Assert — stats fetched but NOT logged (zero attempts)
         ocr_provider.get_stats.assert_called_once()
+        mock_log.info.assert_not_called()
 
     def test_no_get_stats_method(self):
         # Arrange — provider without get_stats

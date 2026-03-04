@@ -157,9 +157,12 @@ class TestOcrHappyPath:
         assert 444 in tags  # POST_TAG_ID
         assert 443 not in tags  # PRE_TAG_ID removed
 
-        # After processing, the processing tag (500) should be released.
-        # The final state should not contain 500.
+        # The processing tag (500) should be absent from the final state.
+        # Note: the happy path in _update_paperless_document already discards
+        # the processing tag before calling update_document, and then
+        # release_processing_tag in the finally block confirms it's gone.
         assert 500 not in state["tags"]
+        assert 500 not in tags  # also absent from the update_document call itself
 
     def test_multi_page_ocr_workflow(self):
         """Multi-frame TIFF produces multi-page text with page headers."""

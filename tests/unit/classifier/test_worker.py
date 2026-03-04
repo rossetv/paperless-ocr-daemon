@@ -218,9 +218,11 @@ class TestProcessEmptyContent:
         # Act
         proc.process()
 
-        # Assert — classify_text not called, requeue happened
+        # Assert — classify_text not called, requeue happened (PRE_TAG_ID in tags)
         proc.classifier.classify_text.assert_not_called()
         proc.paperless_client.update_document_metadata.assert_called()
+        tags = proc.paperless_client.update_document_metadata.call_args.kwargs.get("tags")
+        assert 443 in tags  # PRE_TAG_ID — document was requeued for OCR
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -279,8 +281,10 @@ class TestProcessEmptyClassificationResult:
         # Act
         proc.process()
 
-        # Assert
+        # Assert — error tag applied (not success path)
         proc.paperless_client.update_document_metadata.assert_called()
+        tags = proc.paperless_client.update_document_metadata.call_args.kwargs.get("tags")
+        assert 552 in tags  # ERROR_TAG_ID — finalize_with_error was called
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -298,8 +302,10 @@ class TestProcessEmptyClassificationResult:
         # Act
         proc.process()
 
-        # Assert — finalize_with_error should be called
+        # Assert — error tag applied (finalize_with_error, not success path)
         proc.paperless_client.update_document_metadata.assert_called()
+        tags = proc.paperless_client.update_document_metadata.call_args.kwargs.get("tags")
+        assert 552 in tags  # ERROR_TAG_ID
 
 
 # ===================================================================
@@ -747,11 +753,8 @@ class TestTruncationWithNote:
         assert mock_trunc.called
         classify_call = proc.classifier.classify_text.call_args
         assert classify_call is not None, "classify_text was never called"
-        # truncation_note may be passed as kwarg or 5th positional arg
-        note = classify_call.kwargs.get("truncation_note")
-        if note is None and len(classify_call.args) > 4:
-            note = classify_call.args[4]
-        assert note == "NOTE: Pages 1-2 of 10."
+        # Source always passes truncation_note as keyword argument
+        assert classify_call.kwargs.get("truncation_note") == "NOTE: Pages 1-2 of 10."
 
 
 # ===================================================================

@@ -78,15 +78,16 @@ class TestBytesToImagesPng:
         # Assert
         assert result[0].size == (20, 30)
 
-    def test_png_returns_copy_not_original(self):
+    def test_png_returns_usable_image(self):
         # Arrange
         png_bytes = _make_png_bytes()
 
         # Act
         result = bytes_to_images(png_bytes, "image/png")
 
-        # Assert — result should be a usable image (copy of original)
+        # Assert — result should be a usable image with correct dimensions
         assert result[0].size == (10, 10)
+        assert result[0].mode in ("RGB", "RGBA", "L")
 
 
 # -----------------------------------------------------------------------
