@@ -25,10 +25,14 @@ from common.shutdown import (
 
 @pytest.fixture(autouse=True)
 def _clean_shutdown():
-    """Reset the shutdown flag before and after each test."""
+    """Reset the shutdown flag and restore original signal handlers."""
+    original_sigterm = signal.getsignal(signal.SIGTERM)
+    original_sigint = signal.getsignal(signal.SIGINT)
     reset_shutdown()
     yield
     reset_shutdown()
+    signal.signal(signal.SIGTERM, original_sigterm)
+    signal.signal(signal.SIGINT, original_sigint)
 
 
 # ===================================================================

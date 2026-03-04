@@ -39,7 +39,7 @@ def is_refusal(text: str, markers: list[str]) -> bool:
     *markers* or a bracketed ``[REDACTED …]`` marker.
     """
     text_lower = text.lower()
-    return any(marker in text_lower for marker in markers) or contains_redacted_marker(
+    return any(marker.lower() in text_lower for marker in markers) or contains_redacted_marker(
         text
     )
 

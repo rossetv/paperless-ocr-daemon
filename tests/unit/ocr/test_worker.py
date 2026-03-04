@@ -454,8 +454,10 @@ class TestUpdatePaperlessDocumentErrors:
         # Act
         proc._update_paperless_document("   ", set())
 
-        # Assert — finalize_with_error path (update_document or update_document_metadata called)
-        assert paperless.update_document.called or paperless.update_document_metadata.called
+        # Assert — finalize_with_error calls update_document with error tag
+        paperless.update_document.assert_called_once()
+        tags_arg = paperless.update_document.call_args[0][2]
+        assert 552 in tags_arg
 
     @patch("ocr.worker.get_latest_tags", return_value={443})
     @patch("ocr.worker.clean_pipeline_tags", return_value=set())
@@ -470,8 +472,10 @@ class TestUpdatePaperlessDocumentErrors:
             f"Some text {OCR_ERROR_MARKER} more", {"m"}
         )
 
-        # Assert
-        assert paperless.update_document.called or paperless.update_document_metadata.called
+        # Assert — finalize_with_error calls update_document with error tag
+        paperless.update_document.assert_called_once()
+        tags_arg = paperless.update_document.call_args[0][2]
+        assert 552 in tags_arg
 
     @patch("ocr.worker.get_latest_tags", return_value={443})
     @patch("ocr.worker.clean_pipeline_tags", return_value=set())
@@ -489,8 +493,10 @@ class TestUpdatePaperlessDocumentErrors:
             "CHATGPT REFUSED TO TRANSCRIBE", set()
         )
 
-        # Assert
-        assert paperless.update_document.called or paperless.update_document_metadata.called
+        # Assert — finalize_with_error calls update_document with error tag
+        paperless.update_document.assert_called_once()
+        tags_arg = paperless.update_document.call_args[0][2]
+        assert 552 in tags_arg
 
     @patch("ocr.worker.get_latest_tags", return_value={443})
     @patch("ocr.worker.clean_pipeline_tags", return_value=set())
@@ -503,8 +509,10 @@ class TestUpdatePaperlessDocumentErrors:
         # Act
         proc._update_paperless_document("Name: [REDACTED]", {"m"})
 
-        # Assert
-        assert paperless.update_document.called or paperless.update_document_metadata.called
+        # Assert — finalize_with_error calls update_document with error tag
+        paperless.update_document.assert_called_once()
+        tags_arg = paperless.update_document.call_args[0][2]
+        assert 552 in tags_arg
 
 
 # -----------------------------------------------------------------------

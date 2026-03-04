@@ -33,9 +33,11 @@ def _clean_root_logger():
     root = logging.getLogger()
     original_handlers = root.handlers[:]
     original_level = root.level
+    original_structlog_config = structlog.get_config()
     yield
     root.handlers = original_handlers
     root.level = original_level
+    structlog.configure(**original_structlog_config)
 
 
 # ===================================================================

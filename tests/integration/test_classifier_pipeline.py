@@ -27,7 +27,6 @@ from classifier.tag_filters import (
     filter_redundant_tags,
 )
 from classifier.taxonomy import TaxonomyCache
-from tests.helpers.factories import make_classification_result
 
 
 # ---------------------------------------------------------------------------

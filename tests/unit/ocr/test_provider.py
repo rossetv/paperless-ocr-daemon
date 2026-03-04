@@ -127,6 +127,18 @@ class TestIsRefusal:
         # Act / Assert
         assert is_refusal("I am unable to help", markers) is True
 
+    def test_mixed_case_markers_still_match(self):
+        """Markers with uppercase chars should still match (case-insensitive)."""
+        markers = ["Cannot Process", "REFUSED"]
+
+        assert is_refusal("i cannot process this image", markers) is True
+        assert is_refusal("the model refused to transcribe", markers) is True
+
+    def test_mixed_case_marker_no_match(self):
+        markers = ["Cannot Process"]
+
+        assert is_refusal("normal document text", markers) is False
+
 
 # -----------------------------------------------------------------------
 # OpenAIProvider — successful transcription

@@ -36,11 +36,18 @@ def _make_settings(
 
 @pytest.fixture(autouse=True)
 def _reset_openai():
-    """Save and restore openai module-level attributes."""
+    """Save and restore openai module-level attributes; close leaked clients."""
     orig_key = getattr(openai, "api_key", None)
     orig_base = getattr(openai, "base_url", None)
     orig_client = getattr(openai, "http_client", None)
     yield
+    # Close any httpx.Client created during the test before restoring
+    new_client = getattr(openai, "http_client", None)
+    if new_client is not None and new_client is not orig_client:
+        try:
+            new_client.close()
+        except Exception:
+            pass
     openai.api_key = orig_key
     openai.base_url = orig_base
     openai.http_client = orig_client

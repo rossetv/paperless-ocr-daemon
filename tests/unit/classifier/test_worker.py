@@ -744,13 +744,14 @@ class TestTruncationWithNote:
         proc.process()
 
         # Assert — the classify_text call includes the truncation note
-        classify_call = proc.classifier.classify_text.call_args
-        truncation_note = classify_call.kwargs.get("truncation_note") or classify_call[0][4] if len(classify_call[0]) > 4 else None
-        # Check it was called with some non-None truncation note
-        call_kwargs = classify_call.kwargs if classify_call.kwargs else {}
-        call_args = classify_call.args if classify_call.args else ()
-        # The truncation_note should be in the call
         assert mock_trunc.called
+        classify_call = proc.classifier.classify_text.call_args
+        assert classify_call is not None, "classify_text was never called"
+        # truncation_note may be passed as kwarg or 5th positional arg
+        note = classify_call.kwargs.get("truncation_note")
+        if note is None and len(classify_call.args) > 4:
+            note = classify_call.args[4]
+        assert note == "NOTE: Pages 1-2 of 10."
 
 
 # ===================================================================
@@ -767,11 +768,18 @@ class TestStatsLoggingEdgeCases:
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
-        # Remove get_stats from classifier mock
-        del proc.classifier.get_stats
+        # Replace classifier with a plain object that truly lacks get_stats.
+        # (del on MagicMock doesn't prevent hasattr from returning True.)
+        orig = proc.classifier
+
+        class _BareClassifier:
+            classify_text = orig.classify_text
+
+        proc.classifier = _BareClassifier()
 
         # Act — should not raise
         proc.process()
 
-        # Assert — process completed without error
+        # Assert — process completed and get_stats was never called
         assert proc.paperless_client.update_document_metadata.called
+        assert not hasattr(proc.classifier, "get_stats")

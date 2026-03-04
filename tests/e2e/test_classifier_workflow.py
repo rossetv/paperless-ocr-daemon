@@ -304,10 +304,10 @@ class TestClassifierHappyPath:
                 classification_call = c
                 break
 
-        if classification_call:
-            kwargs = classification_call[1]
-            # custom_fields should be None (no person to set)
-            assert kwargs.get("custom_fields") is None
+        assert classification_call is not None, "update_document_metadata was never called with 'title'"
+        kwargs = classification_call[1]
+        # custom_fields should be None (no person to set)
+        assert kwargs.get("custom_fields") is None
 
 
 # ---------------------------------------------------------------------------
