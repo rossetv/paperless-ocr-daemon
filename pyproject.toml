@@ -20,3 +20,12 @@ paperless-classifier-daemon = "classifier.daemon:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Unit tests (fast, no I/O)",
+    "integration: Integration tests (module boundaries)",
+    "e2e: End-to-end tests (full workflows)",
+]
+addopts = "-q --tb=short"

@@ -821,7 +821,15 @@ paperless-ocr-daemon/
 │       ├── tag_filters.py      Tag filtering, enrichment, extraction
 │       ├── normalizers.py      String normalization (company suffixes, etc.)
 │       └── constants.py        Regex patterns, blacklists, error phrases
-└── tests/                      22 test files covering all modules
+└── tests/                      Structured test suite (800+ tests)
+    ├── conftest.py             Root fixtures, markers, path setup
+    ├── helpers/                Shared factories and mock builders
+    ├── unit/                   Unit tests (mirrors src/ layout)
+    │   ├── common/             Tests for src/common/
+    │   ├── classifier/         Tests for src/classifier/
+    │   └── ocr/                Tests for src/ocr/
+    ├── integration/            Cross-module integration tests
+    └── e2e/                    Full workflow end-to-end tests
 ```
 
 ---
@@ -856,6 +864,44 @@ python3 -m src.classifier.daemon  # Classification daemon
 - Poppler (`poppler-utils`) — required for PDF to image conversion
 
 **CI/CD:** On push to `main`, GitHub Actions runs `pytest`, then builds a multi-platform Docker image (`linux/amd64`, `linux/arm64`) and pushes it to Docker Hub as `rossetv/paperless-ocr-daemon:latest`.
+
+### Running Tests
+
+The test suite is organized into three categories: unit, integration, and end-to-end.
+
+```bash
+# Run all tests
+pytest
+
+# Run by category
+pytest tests/unit/                    # Unit tests only (~750 tests, <5s)
+pytest tests/integration/             # Integration tests (~30 tests)
+pytest tests/e2e/                     # End-to-end tests (~20 tests)
+
+# Run by module
+pytest tests/unit/common/             # All common module tests
+pytest tests/unit/classifier/         # All classifier module tests
+pytest tests/unit/ocr/                # All OCR module tests
+
+# Run a single file or test
+pytest tests/unit/common/test_config.py
+pytest tests/unit/common/test_config.py::TestDefaultValues::test_default_paperless_url
+
+# Generate coverage report
+pytest --cov=src --cov-report=term-missing --cov-branch
+
+# Generate HTML coverage report
+pytest --cov=src --cov-report=html --cov-branch
+open htmlcov/index.html
+```
+
+### Adding New Tests
+
+- **Directory structure**: Tests mirror the source layout. For `src/classifier/foo.py`, create `tests/unit/classifier/test_foo.py`.
+- **Naming**: Use `test_<function>_<scenario>_<expected>` (e.g. `test_parse_date_empty_string_returns_none`).
+- **Factories**: Use `make_settings_obj()`, `make_document()`, `make_classification_result()` from `tests/helpers/factories.py`.
+- **Mocks**: Use `make_mock_paperless()`, `make_mock_ocr_provider()` from `tests/helpers/mocks.py`.
+- **Markers**: Tests are auto-marked by directory (`unit`, `integration`, `e2e`).
 
 ---
 
