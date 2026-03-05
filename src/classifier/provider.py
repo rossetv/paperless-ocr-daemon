@@ -8,7 +8,7 @@ import openai
 import structlog
 
 from common.config import Settings
-from common.llm import OpenAIChatMixin, ThreadSafeStats, unique_models
+from common.llm import OpenAIChatMixin, unique_models
 from .prompts import (
     CLASSIFICATION_JSON_SCHEMA,
     CLASSIFICATION_PROMPT,
@@ -29,13 +29,7 @@ class ClassificationProvider(OpenAIChatMixin):
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self._stats = ThreadSafeStats(self._STAT_KEYS)
-
-    def reset_stats(self) -> None:
-        self._stats.reset(self._STAT_KEYS)
-
-    def get_stats(self) -> dict[str, int]:
-        return self._stats.snapshot()
+        self._init_stats()
 
     def _supports_temperature(self, model: str) -> bool:
         # OpenAI's GPT-5 series does not accept a temperature parameter and

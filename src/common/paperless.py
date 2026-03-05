@@ -16,6 +16,11 @@ log = structlog.get_logger(__name__)
 # 5xx-induced HTTPStatusError (raised by _raise_for_status_if_server_error).
 RETRYABLE_HTTP_EXCEPTIONS = (httpx.RequestError, httpx.HTTPStatusError)
 
+# Exceptions that callers should catch when wrapping PaperlessClient calls
+# in non-fatal error handling.  Covers network errors, HTTP errors, and
+# unexpected response shapes.
+PAPERLESS_CALL_EXCEPTIONS = (OSError, httpx.HTTPError, ValueError, KeyError)
+
 
 class DocumentMetadataUpdate(TypedDict, total=False):
     """Keyword arguments accepted by :meth:`PaperlessClient.update_document_metadata`."""

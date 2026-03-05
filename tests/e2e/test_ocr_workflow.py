@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 from PIL import Image
 
-from ocr.worker import DocumentProcessor
+from ocr.worker import OcrProcessor
 from ocr.text_assembly import OCR_ERROR_MARKER
 from tests.helpers.factories import make_document, make_png_bytes, make_settings_obj
 
@@ -91,7 +91,7 @@ class TestOcrHappyPath:
     def test_complete_ocr_workflow(self):
         """
         Full OCR lifecycle:
-        1. Create a DocumentProcessor with mocks
+        1. Create a OcrProcessor with mocks
         2. download_content returns real PNG image bytes
         3. get_document returns document with pre-tag
         4. Run process()
@@ -109,7 +109,7 @@ class TestOcrHappyPath:
             transcribe_return=("Invoice from Acme Corp. Total: $500.", "gpt-5-mini")
         )
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -168,7 +168,7 @@ class TestOcrHappyPath:
             transcribe_side_effect=transcribe_side_effect
         )
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -206,7 +206,7 @@ class TestOcrErrorPath:
             transcribe_side_effect=Exception("Model unavailable")
         )
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -235,7 +235,7 @@ class TestOcrErrorPath:
             transcribe_return=("CHATGPT REFUSED TO TRANSCRIBE", "")
         )
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -259,7 +259,7 @@ class TestOcrErrorPath:
 
         provider = _make_mock_ocr_provider()
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -292,7 +292,7 @@ class TestOcrLockContention:
 
         provider = _make_mock_ocr_provider()
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -320,7 +320,7 @@ class TestOcrLockContention:
             transcribe_return=("Transcribed text.", "gpt-5-mini")
         )
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,
@@ -342,7 +342,7 @@ class TestOcrLockContention:
 
         provider = _make_mock_ocr_provider()
 
-        processor = DocumentProcessor(
+        processor = OcrProcessor(
             doc=doc,
             paperless_client=client,
             ocr_provider=provider,

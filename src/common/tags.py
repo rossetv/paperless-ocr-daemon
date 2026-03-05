@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import httpx
 import structlog
 
-from .paperless import PaperlessClient
+from .paperless import PAPERLESS_CALL_EXCEPTIONS, PaperlessClient
 
 if TYPE_CHECKING:
     from .config import Settings
@@ -38,7 +37,7 @@ def get_latest_tags(
     """Fetch current tags from the API, falling back to a cached copy on error."""
     try:
         latest = client.get_document(doc_id)
-    except (OSError, httpx.HTTPError, ValueError):
+    except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to refresh document tags; using cached tags",
             doc_id=doc_id,
@@ -65,7 +64,7 @@ def remove_stale_queue_tag(
         updated.discard(processing_tag_id)
     try:
         client.update_document_metadata(doc_id, tags=list(updated))
-    except (OSError, httpx.HTTPError):
+    except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to remove stale queue tag",
             doc_id=doc_id,
@@ -91,7 +90,7 @@ def release_processing_tag(
         return
     try:
         latest = client.get_document(doc_id)
-    except (OSError, httpx.HTTPError):
+    except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to refresh document before releasing processing tag",
             doc_id=doc_id,
@@ -105,7 +104,7 @@ def release_processing_tag(
     tags.discard(tag_id)
     try:
         client.update_document_metadata(doc_id, tags=list(tags))
-    except (OSError, httpx.HTTPError):
+    except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to release processing tag",
             doc_id=doc_id,

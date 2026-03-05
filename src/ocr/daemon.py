@@ -12,7 +12,7 @@ from common.daemon_loop import run_polling_threadpool
 from common.paperless import PaperlessClient
 from common.document_iter import iter_documents_by_pipeline_tag
 from .provider import OcrProvider
-from .worker import DocumentProcessor
+from .worker import OcrProcessor
 
 
 def _process_document(doc: dict, settings: Settings) -> None:
@@ -20,7 +20,7 @@ def _process_document(doc: dict, settings: Settings) -> None:
     paperless = PaperlessClient(settings)
     ocr_provider = OcrProvider(settings)
     try:
-        processor = DocumentProcessor(doc, paperless, ocr_provider, settings)
+        processor = OcrProcessor(doc, paperless, ocr_provider, settings)
         processor.process()
     finally:
         paperless.close()

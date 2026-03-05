@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import httpx
 from openai import APIError as OpenAIAPIError
 import structlog
 
 from .config import Settings
-from .llm import get_openai_client
-from .paperless import PaperlessClient
+from .llm import get_openai_client, is_openai_client_ready
+from .paperless import PAPERLESS_CALL_EXCEPTIONS, PaperlessClient
 
 log = structlog.get_logger(__name__)
 
@@ -29,7 +28,7 @@ def _check_paperless_reachable(settings: Settings, client: PaperlessClient) -> N
     try:
         client.ping(timeout=10)
         log.info("Preflight: Paperless-ngx API is reachable", url=settings.PAPERLESS_URL)
-    except (OSError, httpx.HTTPError) as exc:
+    except PAPERLESS_CALL_EXCEPTIONS as exc:
         raise PreflightError(
             f"Paperless-ngx API is not reachable at {settings.PAPERLESS_URL}: {exc}"
         ) from exc
@@ -38,7 +37,7 @@ def _check_paperless_reachable(settings: Settings, client: PaperlessClient) -> N
 def _check_tag_ids_exist(settings: Settings, client: PaperlessClient) -> None:
     try:
         all_tags = client.list_tags()
-    except (OSError, httpx.HTTPError):
+    except PAPERLESS_CALL_EXCEPTIONS:
         log.warning("Preflight: Could not fetch tags from Paperless; skipping tag validation")
         return
 
@@ -69,12 +68,13 @@ def _check_tag_ids_exist(settings: Settings, client: PaperlessClient) -> None:
 
 def _check_llm_reachable() -> None:
     """Best-effort check that the LLM provider is reachable."""
+    if not is_openai_client_ready():
+        log.warning("Preflight: OpenAI client not initialised; skipping LLM check")
+        return
     try:
         client = get_openai_client()
         client.models.list()
         log.info("Preflight: LLM provider is reachable")
-    except RuntimeError:
-        log.warning("Preflight: OpenAI client not initialised; skipping LLM check")
     except (OpenAIAPIError, OSError) as exc:
         log.warning(
             "Preflight: LLM provider is not reachable; "

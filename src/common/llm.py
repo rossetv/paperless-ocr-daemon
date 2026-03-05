@@ -31,6 +31,10 @@ class _OpenAIClientHolder:
     def init(self, client: openai.OpenAI) -> None:
         self._client = client
 
+    def is_ready(self) -> bool:
+        """Return ``True`` if a client has been stored."""
+        return self._client is not None
+
     def get(self) -> openai.OpenAI:
         """Return the stored client, raising if not yet initialised."""
         if self._client is None:
@@ -50,13 +54,34 @@ def get_openai_client() -> openai.OpenAI:
     return _openai_holder.get()
 
 
+def is_openai_client_ready() -> bool:
+    """Return ``True`` if the OpenAI client has been initialised."""
+    return _openai_holder.is_ready()
+
+
 class OpenAIChatMixin:
     """
-    Mixin providing a retried OpenAI-compatible chat completion call.
+    Mixin providing a retried OpenAI-compatible chat completion call and
+    thread-safe stats helpers.
+
+    Subclasses define a ``_STAT_KEYS`` class attribute and call
+    ``_init_stats()`` in their ``__init__``.  The mixin then provides
+    ``reset_stats()`` and ``get_stats()``.
 
     The mixin expects ``self.settings`` to expose ``MAX_RETRIES`` and
     ``MAX_RETRY_BACKOFF_SECONDS`` for the retry decorator.
     """
+
+    _STAT_KEYS: tuple[str, ...] = ()
+
+    def _init_stats(self) -> None:
+        self._stats = ThreadSafeStats(self._STAT_KEYS)
+
+    def reset_stats(self) -> None:
+        self._stats.reset(self._STAT_KEYS)
+
+    def get_stats(self) -> dict[str, int]:
+        return self._stats.snapshot()
 
     @retry(retryable_exceptions=RETRYABLE_OPENAI_EXCEPTIONS)
     def _create_completion(self, **kwargs):

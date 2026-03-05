@@ -103,7 +103,7 @@ def run_polling_threadpool(
                 was_idle=was_idle,
             )
             sleep(poll_interval_seconds)
-        except (OSError, httpx.HTTPError, RuntimeError, ValueError, TypeError) as exc:
+        except (OSError, httpx.HTTPError, RuntimeError, ValueError, TypeError, KeyError) as exc:
             log.error(
                 "Unexpected error in daemon loop; sleeping",
                 daemon=daemon_name,

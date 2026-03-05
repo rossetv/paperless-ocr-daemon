@@ -268,7 +268,7 @@ class TestIterDocsToOcrMixed:
 class TestProcessDocument:
     @patch("ocr.daemon.OcrProvider")
     @patch("ocr.daemon.PaperlessClient")
-    @patch("ocr.daemon.DocumentProcessor")
+    @patch("ocr.daemon.OcrProcessor")
     def test_creates_client_provider_processes_and_closes(
         self, MockProcessor, MockClient, MockProvider
     ):
@@ -296,7 +296,7 @@ class TestProcessDocument:
 
     @patch("ocr.daemon.OcrProvider")
     @patch("ocr.daemon.PaperlessClient")
-    @patch("ocr.daemon.DocumentProcessor")
+    @patch("ocr.daemon.OcrProcessor")
     def test_client_closed_even_on_process_error(
         self, MockProcessor, MockClient, MockProvider
     ):
@@ -319,7 +319,7 @@ class TestProcessDocument:
 
     @patch("ocr.daemon.OcrProvider")
     @patch("ocr.daemon.PaperlessClient")
-    @patch("ocr.daemon.DocumentProcessor")
+    @patch("ocr.daemon.OcrProcessor")
     def test_provider_created_with_settings(
         self, MockProcessor, MockClient, MockProvider
     ):

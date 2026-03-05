@@ -10,7 +10,7 @@ import structlog
 from PIL import Image
 
 from common.config import Settings
-from common.llm import OpenAIChatMixin, ThreadSafeStats, unique_models
+from common.llm import OpenAIChatMixin, unique_models
 from common.utils import is_error_content
 from .prompts import TRANSCRIPTION_PROMPT
 
@@ -39,13 +39,7 @@ class OcrProvider(OpenAIChatMixin):
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self._stats = ThreadSafeStats(self._STAT_KEYS)
-
-    def reset_stats(self) -> None:
-        self._stats.reset(self._STAT_KEYS)
-
-    def get_stats(self) -> dict[str, int]:
-        return self._stats.snapshot()
+        self._init_stats()
 
     def transcribe_image(
         self,

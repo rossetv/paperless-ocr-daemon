@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image
 
-from ocr.worker import DocumentProcessor
+from ocr.worker import OcrProcessor
 from ocr.text_assembly import OCR_ERROR_MARKER
 from tests.helpers.factories import make_document, make_settings_obj
 from tests.helpers.mocks import make_mock_ocr_provider, make_mock_paperless
@@ -20,7 +20,7 @@ def _make_processor(
     settings=None,
     **setting_overrides,
 ):
-    """Create a DocumentProcessor with mocked dependencies."""
+    """Create a OcrProcessor with mocked dependencies."""
     if doc is None:
         doc = make_document()
     if settings is None:
@@ -29,7 +29,7 @@ def _make_processor(
         paperless = make_mock_paperless()
     if ocr_provider is None:
         ocr_provider = make_mock_ocr_provider()
-    return DocumentProcessor(doc, paperless, ocr_provider, settings)
+    return OcrProcessor(doc, paperless, ocr_provider, settings)
 
 
 def _make_image():
@@ -66,7 +66,7 @@ class TestProcessHappyPath:
 
         mock_assemble.return_value = ("Full text\n\nTranscribed by model: model-a", {"model-a"})
 
-        proc = DocumentProcessor(
+        proc = OcrProcessor(
             {"id": 1, "title": "Test", "tags": [443]},
             paperless,
             ocr_provider,
@@ -552,7 +552,7 @@ class TestImagesAlwaysClosed:
         # Assert — image closed despite OCR error
         img1.close.assert_called_once()
 
-class TestDocumentProcessorInit:
+class TestOcrProcessorInit:
     def test_extracts_doc_id(self):
         # Arrange
         doc = make_document(id=42)

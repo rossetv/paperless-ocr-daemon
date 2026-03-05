@@ -26,7 +26,7 @@ from .text_assembly import OCR_ERROR_MARKER, assemble_full_text
 log = structlog.get_logger(__name__)
 
 
-class DocumentProcessor:
+class OcrProcessor:
     """
     Orchestrates the OCR processing of a single Paperless document.
 
