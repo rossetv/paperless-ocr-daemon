@@ -1,23 +1,4 @@
-"""
-Paperless-ngx AI OCR Daemon
-===========================
-
-Entry point for the OCR daemon.
-
-High-level behaviour
---------------------
-
-1. Poll Paperless-ngx for documents with the *OCR queue tag* (``PRE_TAG_ID``).
-2. For each queued document:
-
-   - Download the original file.
-   - Convert the file to images (PDF pages or image frames).
-   - Transcribe each page using a vision-capable LLM.
-   - Upload the transcription back to Paperless (``content`` field).
-   - Update tags to move the document through the pipeline.
-
-The exact tags are configured via environment variables (see :class:`Settings`).
-"""
+"""OCR daemon entry point."""
 
 from __future__ import annotations
 

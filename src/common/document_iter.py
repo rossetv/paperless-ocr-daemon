@@ -1,11 +1,4 @@
-"""
-Document Iteration with Tag Filtering
-======================================
-
-Yields documents queued for processing, filtering out already-done and
-claimed documents.  Both the OCR and classification daemons share this
-control flow.
-"""
+"""Yields queued documents, filtering out already-done and claimed ones."""
 
 from __future__ import annotations
 

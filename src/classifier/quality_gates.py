@@ -1,10 +1,4 @@
-"""
-Quality Gates
-=============
-
-Functions that decide whether a classification result or document content
-is suitable for use, or should be flagged as an error.
-"""
+"""Quality gates for classification results and document content."""
 
 from __future__ import annotations
 

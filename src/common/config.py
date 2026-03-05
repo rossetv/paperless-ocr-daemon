@@ -1,14 +1,4 @@
-"""
-Configuration module for the Paperless-ngx OCR and classification daemons.
-
-This module centralizes the loading and validation of **all** configuration
-parameters from environment variables.  It provides a single :class:`Settings`
-class — a pure data container with no side effects on import — that is
-consumed by every other module in the codebase.
-
-Library-level setup (OpenAI SDK, Pillow, httpx) lives in
-:mod:`common.library_setup` to keep this module free of side effects.
-"""
+"""Environment-variable configuration for the OCR and classification daemons."""
 
 from __future__ import annotations
 
@@ -17,12 +7,6 @@ from typing import Literal
 
 
 class Settings:
-    """
-    A container for all configuration settings, loaded from environment variables.
-
-    This class centralizes configuration, providing default values for optional
-    settings and raising errors for missing required settings.
-    """
 
     # --- Paperless-ngx API Configuration ---
     PAPERLESS_URL: str

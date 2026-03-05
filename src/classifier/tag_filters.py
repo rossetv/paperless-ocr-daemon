@@ -1,18 +1,4 @@
-"""
-Tag Filtering and Enrichment
-=============================
-
-Pure functions for cleaning, deduplicating, filtering, and enriching the list
-of tags that the classification LLM suggests.
-
-The pipeline applies these in order:
-
-1. :func:`filter_blacklisted_tags` — remove tags that collide with system labels.
-2. :func:`filter_redundant_tags` — remove tags that duplicate the correspondent,
-   document type, or person.
-3. :func:`enrich_tags` — merge model-suggested tags with required tags
-   (year, country, OCR model markers) and enforce the tag limit.
-"""
+"""Tag filtering, deduplication, and enrichment for classification output."""
 
 from __future__ import annotations
 
@@ -29,10 +15,6 @@ from .normalizers import normalize_name, normalize_simple
 
 log = structlog.get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Deduplication
-# ---------------------------------------------------------------------------
 
 def dedupe_tags(tags: Iterable[str]) -> list[str]:
     """
@@ -56,10 +38,6 @@ def dedupe_tags(tags: Iterable[str]) -> list[str]:
         output.append(tag)
     return output
 
-
-# ---------------------------------------------------------------------------
-# Filters
-# ---------------------------------------------------------------------------
 
 def filter_redundant_tags(
     tags: Iterable[str],
@@ -106,10 +84,6 @@ def filter_blacklisted_tags(tags: Iterable[str]) -> list[str]:
     ]
 
 
-# ---------------------------------------------------------------------------
-# Model-tag extraction
-# ---------------------------------------------------------------------------
-
 def extract_model_tags(text: str) -> list[str]:
     """
     Extract model name tags from ``Transcribed by model: …`` footers.
@@ -133,10 +107,6 @@ def extract_model_tags(text: str) -> list[str]:
                 tags.append(tag)
     return dedupe_tags(tags)
 
-
-# ---------------------------------------------------------------------------
-# Enrichment
-# ---------------------------------------------------------------------------
 
 def enrich_tags(
     tags: list[str],

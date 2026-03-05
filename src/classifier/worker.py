@@ -1,21 +1,4 @@
-"""
-Document Classification Worker
-==============================
-
-Orchestrates the end-to-end classification of a single Paperless document.
-
-This module is intentionally thin — it delegates to focused modules for each
-concern:
-
-- :mod:`classifier.provider` — LLM interaction.
-- :mod:`classifier.taxonomy` — resolving / creating Paperless taxonomy items.
-- :mod:`classifier.tag_filters` — cleaning and enriching tags.
-- :mod:`classifier.content_prep` — truncating OCR text for the LLM.
-- :mod:`classifier.metadata` — date, language, and custom-field helpers.
-
-The :class:`ClassificationProcessor` ties them together into the workflow:
-fetch document → validate → truncate → classify → apply metadata.
-"""
+"""Per-document classification orchestrator."""
 
 from __future__ import annotations
 
@@ -79,10 +62,6 @@ class ClassificationProcessor:
         self.settings = settings
         self.doc_id: int = doc["id"]
         self.title: str = doc.get("title") or "<untitled>"
-
-    # ------------------------------------------------------------------
-    # Main entry point
-    # ------------------------------------------------------------------
 
     def process(self) -> None:
         """
@@ -158,10 +137,6 @@ class ClassificationProcessor:
                 )
             self._log_classification_stats()
 
-    # ------------------------------------------------------------------
-    # Content truncation
-    # ------------------------------------------------------------------
-
     def _truncate_content(self, content: str) -> tuple[str, list[str]]:
         """
         Apply page-based and character-based truncation in sequence.
@@ -209,10 +184,6 @@ class ClassificationProcessor:
 
         return input_text, truncation_notes
 
-    # ------------------------------------------------------------------
-    # Tag management
-    # ------------------------------------------------------------------
-
     def _claim_processing_tag(self) -> bool:
         """Claim the classification processing-lock tag with verification."""
         return claim_processing_tag(
@@ -240,12 +211,7 @@ class ClassificationProcessor:
             self.doc_id,
             tags,
             self.settings,
-            log,
         )
-
-    # ------------------------------------------------------------------
-    # Classification application
-    # ------------------------------------------------------------------
 
     def _build_tag_names(
         self,
@@ -345,12 +311,7 @@ class ClassificationProcessor:
             tags_added=len(tag_ids),
         )
 
-    # ------------------------------------------------------------------
-    # Observability
-    # ------------------------------------------------------------------
-
     def _log_classification_stats(self) -> None:
-        """Log classification model stats."""
         stats = self.classifier.get_stats()
         if not stats or not stats.get("attempts"):
             return

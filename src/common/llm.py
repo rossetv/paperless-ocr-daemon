@@ -1,11 +1,8 @@
-"""
-Shared LLM helpers.
-
-This module centralizes the OpenAI-compatible chat completion call so OCR and
-classification reuse the same retry behavior and logging patterns.
-"""
+"""Shared LLM helpers: retried chat completion, model dedup, thread-safe stats."""
 
 from __future__ import annotations
+
+import threading
 
 import openai
 
@@ -44,3 +41,23 @@ def unique_models(models: list[str]) -> list[str]:
             seen.add(model)
             unique.append(model)
     return unique
+
+
+class ThreadSafeStats:
+    """Thread-safe counter dict used by OCR and classification providers."""
+
+    def __init__(self, keys: list[str]) -> None:
+        self._lock = threading.Lock()
+        self._stats = {k: 0 for k in keys}
+
+    def inc(self, key: str) -> None:
+        with self._lock:
+            self._stats[key] += 1
+
+    def snapshot(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._stats)
+
+    def reset(self, keys: list[str]) -> None:
+        with self._lock:
+            self._stats = {k: 0 for k in keys}

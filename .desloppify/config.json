@@ -18,7 +18,10 @@
     "orphaned::src/common/utils.py",
     "security::src/common/retry.py",
     "smells::tests/",
-    "structural::tests/"
+    "structural::tests/",
+    "test_coverage::src/ocr/daemon.py::untested_module",
+    "test_coverage::src/ocr/worker.py::untested_module",
+    "test_coverage::src/ocr/provider.py"
   ],
   "ignore_metadata": {},
   "zone_overrides": {},

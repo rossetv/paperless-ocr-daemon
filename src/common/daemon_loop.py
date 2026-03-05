@@ -1,22 +1,4 @@
-"""
-Daemon Loop Utilities
-=====================
-
-This project ships two long-running processes ("daemons"):
-
-1. OCR daemon: polls Paperless for documents tagged for OCR and uploads text.
-2. Classification daemon: polls Paperless for documents tagged for classification
-   and enriches Paperless metadata using an LLM.
-
-Both daemons share the same control-flow pattern:
-
-- Poll for work on an interval.
-- If work is found, process a batch concurrently.
-- Keep running forever (until SIGTERM / SIGINT).
-
-This module contains a small, reusable loop implementation so the OCR and
-classification entrypoints stay thin and easy to read.
-"""
+"""Polling loop with concurrent thread pool processing for both daemons."""
 
 from __future__ import annotations
 
@@ -103,28 +85,7 @@ def run_polling_threadpool(
     """
     Run an infinite polling loop and process items concurrently in a thread pool.
 
-    This function intentionally keeps behaviour conservative and predictable:
-
-    - Items are fetched once per loop iteration.
-    - Each loop iteration processes at most the current batch.
-    - Exceptions raised while processing one item are logged and do not stop
-      the daemon.
-
-    Args:
-        daemon_name:
-            Name used in log messages ("ocr", "classifier", ...).
-        fetch_work:
-            A function returning the next batch of work items.
-        process_item:
-            Processes a single work item. Exceptions are caught and logged.
-        poll_interval_seconds:
-            How long to sleep between polling iterations.
-        max_workers:
-            ThreadPoolExecutor worker count for processing items in parallel.
-        before_each_batch:
-            Optional hook invoked once per non-empty batch (e.g. to refresh caches).
-        sleep:
-            Injectable sleep function (primarily for tests).
+    This function intentionally keeps behaviour conservative and predictable.
     """
     poll_interval_seconds = max(1, int(poll_interval_seconds))
     max_workers = max(1, int(max_workers))
