@@ -25,6 +25,7 @@ class PaperlessClient:
         self._client = httpx.Client(
             headers={"Authorization": f"Token {self.settings.PAPERLESS_TOKEN}"},
             timeout=self.settings.REQUEST_TIMEOUT,
+            follow_redirects=True,
         )
 
     def _raise_for_status_if_server_error(self, response: httpx.Response) -> None:

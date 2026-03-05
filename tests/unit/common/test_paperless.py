@@ -565,6 +565,25 @@ class TestPing:
         assert route.call_count == 1
         client.close()
 
+    def test_follows_redirect(self):
+        # Arrange – Paperless-ngx may redirect /api/ to schema/view/
+        with respx.mock:
+            respx.get(f"{BASE}/api/").mock(
+                return_value=httpx.Response(
+                    302,
+                    headers={"Location": f"{BASE}/api/schema/view/"},
+                ),
+            )
+            respx.get(f"{BASE}/api/schema/view/").mock(
+                return_value=httpx.Response(200, json={}),
+            )
+            client = _make_client()
+
+            # Act – should not raise
+            client.ping()
+
+        client.close()
+
     def test_raises_on_failure(self):
         # Arrange
         with respx.mock:
