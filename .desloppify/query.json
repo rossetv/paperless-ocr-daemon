@@ -1,26 +1,93 @@
 {
-  "command": "resolve",
-  "patterns": [
-    "structural::src/common/paperless.py"
-  ],
-  "status": "fixed",
-  "resolved": [
-    "structural::src/common/paperless.py"
-  ],
-  "count": 1,
-  "next_command": "desloppify scan",
-  "overall_score": 95.0,
-  "objective_score": 99.3,
-  "strict_score": 94.0,
-  "verified_strict_score": 92.0,
-  "prev_overall_score": 94.9,
-  "prev_objective_score": 99.1,
-  "prev_strict_score": 93.9,
-  "prev_verified_strict_score": 92.0,
-  "attestation": "I have actually reviewed the structure and determined the class is already well-decomposed with short focused methods \u2014 further splitting would hurt cohesion \u2014 and I am not gaming the score by resolving without fixing.",
+  "command": "show",
+  "query": "structural",
+  "status_filter": "open",
+  "total": 5,
+  "summary": {
+    "by_tier": {
+      "T3": 5
+    },
+    "by_detector": {
+      "structural": 5
+    },
+    "files": 5
+  },
+  "by_file": {
+    "src/classifier/tag_filters.py": [
+      {
+        "id": "structural::src/classifier/tag_filters.py",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Needs decomposition: complexity score 36",
+        "detail": {
+          "complexity_score": 36,
+          "complexity_signals": [
+            "nesting depth 16"
+          ],
+          "loc": 204
+        }
+      }
+    ],
+    "src/classifier/worker.py": [
+      {
+        "id": "structural::src/classifier/worker.py",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Needs decomposition: large (357 LOC)",
+        "detail": {
+          "loc": 357
+        }
+      }
+    ],
+    "src/common/daemon_loop.py": [
+      {
+        "id": "structural::src/common/daemon_loop.py",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Needs decomposition: complexity score 56",
+        "detail": {
+          "complexity_score": 56,
+          "complexity_signals": [
+            "function with 11 params",
+            "nesting depth 20"
+          ],
+          "loc": 171
+        }
+      }
+    ],
+    "src/common/document_iter.py": [
+      {
+        "id": "structural::src/common/document_iter.py",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Needs decomposition: complexity score 48",
+        "detail": {
+          "complexity_score": 48,
+          "complexity_signals": [
+            "nesting depth 20"
+          ],
+          "loc": 73
+        }
+      }
+    ],
+    "src/common/paperless.py": [
+      {
+        "id": "structural::src/common/paperless.py",
+        "tier": 3,
+        "confidence": "medium",
+        "summary": "Needs decomposition: large (307 LOC)",
+        "detail": {
+          "loc": 307
+        }
+      }
+    ]
+  },
+  "total_matching": 5,
+  "noise_budget": 10,
+  "noise_global_budget": 0,
   "narrative": {
     "phase": "stagnation",
-    "headline": "\u26a0 990 security findings \u2014 review before other cleanup. All T1 items cleared!",
+    "headline": "\u26a0 992 security findings \u2014 review before other cleanup. All T1 items cleared!",
     "dimensions": {
       "lowest_dimensions": [
         {
@@ -40,49 +107,92 @@
           "impact_description": "re-review to improve"
         },
         {
-          "name": "AI generated debt",
-          "strict": 91.0,
-          "issues": 0,
-          "impact": 0.0,
-          "subjective": true,
-          "impact_description": "re-review to improve"
+          "name": "File health",
+          "strict": 90.3,
+          "issues": 5,
+          "impact": 0.0
         }
       ],
       "biggest_gap_dimensions": [
         {
           "name": "Test health",
           "lenient": 100.0,
-          "strict": 94.9,
-          "gap": 5.1,
+          "strict": 95.1,
+          "gap": 4.9,
           "wontfix_count": 2
         },
         {
           "name": "Code quality",
-          "lenient": 97.8,
-          "strict": 95.2,
-          "gap": 2.6,
-          "wontfix_count": 11
+          "lenient": 97.9,
+          "strict": 95.7,
+          "gap": 2.2,
+          "wontfix_count": 10
         }
       ],
       "stagnant_dimensions": [
-        {
-          "name": "File health",
-          "strict": 100.0,
-          "stuck_scans": 5
-        },
         {
           "name": "Duplication",
           "strict": 100.0,
           "stuck_scans": 5
         },
         {
-          "name": "Security",
-          "strict": 99.6,
+          "name": "Error consistency",
+          "strict": 90.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Abstraction fit",
+          "strict": 92.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "AI generated debt",
+          "strict": 91.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "High elegance",
+          "strict": 93.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Mid elegance",
+          "strict": 91.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Low elegance",
+          "strict": 90.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Cross-module arch",
+          "strict": 93.0,
           "stuck_scans": 5
         },
         {
           "name": "Convention drift",
           "strict": 95.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Dep health",
+          "strict": 94.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Test strategy",
+          "strict": 92.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Structure nav",
+          "strict": 96.0,
+          "stuck_scans": 5
+        },
+        {
+          "name": "Design coherence",
+          "strict": 93.0,
           "stuck_scans": 5
         }
       ]
@@ -113,8 +223,8 @@
       {
         "type": "refactor",
         "detector": "structural",
-        "count": 16,
-        "description": "16 structural findings \u2014 decompose large files \u2014 extract logic into focused modules",
+        "count": 21,
+        "description": "21 structural findings \u2014 decompose large files \u2014 extract logic into focused modules",
         "command": "desloppify show structural --status open",
         "impact": 0.0,
         "dimension": "File health",
@@ -146,8 +256,8 @@
       {
         "type": "manual_fix",
         "detector": "security",
-        "count": 990,
-        "description": "990 security findings \u2014 review and fix security findings \u2014 prioritize by severity",
+        "count": 992,
+        "description": "992 security findings \u2014 review and fix security findings \u2014 prioritize by severity",
         "command": "desloppify show security --status open",
         "impact": 0.0,
         "dimension": "Security",
@@ -158,7 +268,7 @@
     "strategy": {
       "fixer_leverage": {
         "auto_fixable_count": 0,
-        "total_count": 1021,
+        "total_count": 1028,
         "coverage": 0.0,
         "impact_ratio": 0.0,
         "recommendation": "none"
@@ -180,7 +290,7 @@
             5,
             6
           ],
-          "file_count": 35,
+          "file_count": 40,
           "total_impact": 0.0,
           "automation": "manual",
           "run_first": false
@@ -219,9 +329,9 @@
     },
     "debt": {
       "overall_gap": 0.4,
-      "wontfix_count": 13,
+      "wontfix_count": 12,
       "worst_dimension": "Test health",
-      "worst_gap": 5.1,
+      "worst_gap": 4.9,
       "trend": "stable"
     },
     "milestone": "All T1 items cleared!",
@@ -238,43 +348,26 @@
       {
         "type": "wontfix_gap",
         "severity": "medium",
-        "message": "Strict/lenient gap is 0.4 pts with 13 wontfix findings"
+        "message": "Strict/lenient gap is 0.4 pts with 12 wontfix findings"
       }
     ],
     "strict_target": {
       "target": 95.0,
-      "current": 94.0,
-      "gap": 1.0,
+      "current": 93.7,
+      "gap": 1.3,
       "state": "below",
       "warning": null
     },
-    "reminders": [
-      {
-        "type": "rereview_needed",
-        "message": "Subjective results may be stale after resolve. Re-run `desloppify review --prepare` to refresh, or reset with `desloppify scan --reset-subjective` before a clean rerun.",
-        "command": "desloppify review --prepare",
-        "priority": 1,
-        "severity": "high"
-      },
-      {
-        "type": "rescan_needed",
-        "message": "Rescan to verify \u2014 cascading effects may create new findings.",
-        "command": "desloppify scan",
-        "priority": 1,
-        "severity": "high"
-      }
-    ],
+    "reminders": [],
     "reminder_history": {
       "zone_classification": 3,
-      "report_scores": 17,
+      "report_scores": 18,
       "feedback_nudge": 3,
       "stagnant_nudge": 15,
       "review_findings_pending": 3,
       "review_not_run": 3,
       "wontfix_growing": 3,
-      "badge_recommendation": 3,
-      "rereview_needed": 1,
-      "rescan_needed": 1
+      "badge_recommendation": 3
     }
   },
   "config": {

@@ -127,10 +127,6 @@ def remove_stale_queue_tag(
         )
 
 
-# Re-export for backward compatibility — moved to common.document_iter
-from .document_iter import iter_documents_by_pipeline_tag  # noqa: F401
-
-
 # ---------------------------------------------------------------------------
 # Processing-lock tag lifecycle
 # ---------------------------------------------------------------------------

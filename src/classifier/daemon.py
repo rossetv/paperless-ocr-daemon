@@ -19,7 +19,7 @@ from common.bootstrap import bootstrap_daemon
 from common.config import Settings
 from common.daemon_loop import run_polling_threadpool
 from common.paperless import PaperlessClient
-from common.tags import iter_documents_by_pipeline_tag
+from common.document_iter import iter_documents_by_pipeline_tag
 from .provider import ClassificationProvider
 from .taxonomy import TaxonomyCache
 from .worker import ClassificationProcessor
