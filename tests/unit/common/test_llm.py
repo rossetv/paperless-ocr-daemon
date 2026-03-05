@@ -2,7 +2,7 @@
 Comprehensive tests for ``common.llm``.
 
 Covers ``unique_models`` deduplication and ``OpenAIChatMixin._create_completion``
-delegation and semaphore usage.
+delegation and concurrency limiter usage.
 """
 
 from __future__ import annotations
@@ -63,11 +63,9 @@ class TestCreateCompletion:
         settings.MAX_RETRY_BACKOFF_SECONDS = 30
         return _TestClient(settings)
 
-    @patch("common.llm.llm_semaphore")
-    def test_delegates_to_openai(self, mock_sem, client):
+    @patch("common.llm.llm_limiter")
+    def test_delegates_to_openai(self, mock_limiter, client):
         """_create_completion passes kwargs through to openai."""
-        mock_sem.return_value.__enter__ = MagicMock(return_value=None)
-        mock_sem.return_value.__exit__ = MagicMock(return_value=False)
         expected = MagicMock()
 
         with patch("common.llm.openai") as mock_openai:
@@ -84,25 +82,18 @@ class TestCreateCompletion:
             messages=[{"role": "user", "content": "hello"}],
         )
 
-    @patch("common.llm.llm_semaphore")
-    def test_uses_llm_semaphore(self, mock_sem, client):
-        """_create_completion wraps the call in llm_semaphore()."""
-        mock_sem.return_value.__enter__ = MagicMock(return_value=None)
-        mock_sem.return_value.__exit__ = MagicMock(return_value=False)
-
+    @patch("common.llm.llm_limiter")
+    def test_uses_llm_limiter(self, mock_limiter, client):
+        """_create_completion wraps the call in llm_limiter.acquire()."""
         with patch("common.llm.openai") as mock_openai:
             mock_openai.chat.completions.create.return_value = MagicMock()
             client._create_completion(model="m")
 
-        mock_sem.assert_called_once()
-        mock_sem.return_value.__enter__.assert_called_once()
+        mock_limiter.acquire.assert_called_once()
 
-    @patch("common.llm.llm_semaphore")
-    def test_extra_kwargs_forwarded(self, mock_sem, client):
+    @patch("common.llm.llm_limiter")
+    def test_extra_kwargs_forwarded(self, mock_limiter, client):
         """All keyword arguments are forwarded to the OpenAI API."""
-        mock_sem.return_value.__enter__ = MagicMock(return_value=None)
-        mock_sem.return_value.__exit__ = MagicMock(return_value=False)
-
         with patch("common.llm.openai") as mock_openai:
             mock_openai.chat.completions.create.return_value = MagicMock()
 

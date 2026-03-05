@@ -7,7 +7,7 @@ from collections.abc import Iterable
 
 import openai
 
-from .concurrency import llm_semaphore
+from .concurrency import llm_limiter
 from .retry import retry
 
 RETRYABLE_OPENAI_EXCEPTIONS = (
@@ -29,7 +29,7 @@ class OpenAIChatMixin:
     @retry(retryable_exceptions=RETRYABLE_OPENAI_EXCEPTIONS)
     def _create_completion(self, **kwargs):
         """Call the OpenAI-compatible chat completion API with retries."""
-        with llm_semaphore():
+        with llm_limiter.acquire():
             return openai.chat.completions.create(**kwargs)
 
 
