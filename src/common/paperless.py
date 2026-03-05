@@ -12,7 +12,9 @@ The `PaperlessClient` class is designed to be a reusable and testable
 component that abstracts away the details of the Paperless-ngx REST API.
 """
 
-from typing import Generator, Iterable
+from __future__ import annotations
+
+from typing import Any, Generator, Iterable
 
 import httpx
 import structlog
@@ -87,7 +89,7 @@ class PaperlessClient:
         name: str,
         matching_algorithm: str | int | None,
         item_label: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Create a named item with an optional matching algorithm.
 
@@ -148,7 +150,7 @@ class PaperlessClient:
         log.debug("Fetching documents with tag", tag_id=tag_id, url=url)
         yield from self._list_all(url)
 
-    def get_document(self, doc_id: int) -> dict:
+    def get_document(self, doc_id: int) -> dict[str, Any]:
         """
         Fetch a single document by ID.
         """
@@ -256,7 +258,7 @@ class PaperlessClient:
 
     def create_correspondent(
         self, name: str, matching_algorithm: str | int | None = "none"
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Create a new correspondent and return the created object.
         """
@@ -270,7 +272,7 @@ class PaperlessClient:
 
     def create_document_type(
         self, name: str, matching_algorithm: str | int | None = "none"
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Create a new document type and return the created object.
         """
@@ -282,7 +284,7 @@ class PaperlessClient:
             item_label="document type",
         )
 
-    def create_tag(self, name: str, matching_algorithm: str | int | None = "none") -> dict:
+    def create_tag(self, name: str, matching_algorithm: str | int | None = "none") -> dict[str, Any]:
         """
         Create a new tag and return the created object.
         """

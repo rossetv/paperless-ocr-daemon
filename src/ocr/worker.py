@@ -25,7 +25,12 @@ from PIL import Image
 from common.claims import claim_processing_tag
 from common.config import Settings
 from common.paperless import PaperlessClient
-from common.tags import clean_pipeline_tags, get_latest_tags, release_processing_tag
+from common.tags import (
+    extract_tags,
+    finalize_document_with_error,
+    get_latest_tags,
+    release_processing_tag,
+)
 from common.utils import contains_redacted_marker
 from .image_converter import bytes_to_images
 from .provider import OcrProvider
@@ -74,7 +79,7 @@ class DocumentProcessor:
             latest = self._refresh_document()
             if latest is None:
                 return
-            current_tags = set(latest.get("tags", []) or [])
+            current_tags = extract_tags(latest, doc_id=self.doc_id, context="ocr-process")
 
             if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in current_tags:
                 log.warning("Document has error tag; skipping OCR", doc_id=self.doc_id)
@@ -87,7 +92,7 @@ class DocumentProcessor:
 
             content, content_type = self.paperless_client.download_content(self.doc_id)
             try:
-                images = self._bytes_to_images(content, content_type)
+                images = bytes_to_images(content, content_type, dpi=self.settings.OCR_DPI)
             except RuntimeError:
                 log.exception(
                     "Unable to convert document to images; marking error",
@@ -116,7 +121,11 @@ class DocumentProcessor:
                     failed_pages=failed_pages,
                 )
 
-            full_text, models_used = self._assemble_full_text(len(images), page_results)
+            full_text, models_used = assemble_full_text(
+                len(images),
+                page_results,
+                include_page_models=self.settings.OCR_INCLUDE_PAGE_MODELS,
+            )
             self._update_paperless_document(full_text, models_used)
         finally:
             if claimed:
@@ -163,14 +172,6 @@ class DocumentProcessor:
         )
 
     # ------------------------------------------------------------------
-    # Image conversion
-    # ------------------------------------------------------------------
-
-    def _bytes_to_images(self, content: bytes, content_type: str) -> list[Image.Image]:
-        """Delegate to :func:`ocr.image_converter.bytes_to_images`."""
-        return bytes_to_images(content, content_type, dpi=self.settings.OCR_DPI)
-
-    # ------------------------------------------------------------------
     # Parallel OCR
     # ------------------------------------------------------------------
 
@@ -211,16 +212,6 @@ class DocumentProcessor:
     # ------------------------------------------------------------------
     # Text assembly
     # ------------------------------------------------------------------
-
-    def _assemble_full_text(
-        self, page_count: int, page_results: list[tuple[str, str]]
-    ) -> tuple[str, set[str]]:
-        """Delegate to :func:`ocr.text_assembly.assemble_full_text`."""
-        return assemble_full_text(
-            page_count,
-            page_results,
-            include_page_models=self.settings.OCR_INCLUDE_PAGE_MODELS,
-        )
 
     # ------------------------------------------------------------------
     # Paperless update
@@ -287,28 +278,23 @@ class DocumentProcessor:
         """
         Mark the document as errored and remove all pipeline tags.
 
-        Preserves user-assigned tags and adds ``ERROR_TAG_ID`` when configured.
-        If *content* is provided, the Paperless ``content`` field is also
-        updated (useful when the OCR output contains refusal markers that
-        should be visible to human reviewers).
+        Delegates to :func:`common.tags.finalize_document_with_error`.
         """
-        updated = clean_pipeline_tags(tags, self.settings)
-        if self.settings.ERROR_TAG_ID:
-            updated.add(self.settings.ERROR_TAG_ID)
-
-        if content is None:
-            self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
-        else:
-            self.paperless_client.update_document(self.doc_id, content, list(updated))
+        finalize_document_with_error(
+            self.paperless_client,
+            self.doc_id,
+            tags,
+            self.settings,
+            log,
+            content=content,
+        )
 
     # ------------------------------------------------------------------
     # Observability
     # ------------------------------------------------------------------
 
     def _log_ocr_stats(self) -> None:
-        """Log OCR model stats if the provider exposes them."""
-        if not hasattr(self.ocr_provider, "get_stats"):
-            return
+        """Log OCR model stats."""
         stats = self.ocr_provider.get_stats()
         if not stats or not stats.get("attempts"):
             return

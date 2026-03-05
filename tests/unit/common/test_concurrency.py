@@ -103,7 +103,6 @@ class TestLimitedSemaphore:
         max_concurrent = 0
         current_concurrent = 0
         lock = threading.Lock()
-        barrier = threading.Barrier(3, timeout=5)  # 3 threads
 
         def worker():
             nonlocal max_concurrent, current_concurrent

@@ -9,21 +9,19 @@ Tests cover:
 - process() download failure -> releases lock
 - process() image conversion failure -> finalizes with error
 - process() always releases processing lock in finally
-- _bytes_to_images delegates to image_converter
 - _ocr_pages_in_parallel: handles errors, preserves order
-- _assemble_full_text: delegates to text_assembly
 - _update_paperless_document: marks error on refusal/empty/redacted
 - _update_paperless_document: happy path swaps tags
 - _finalize_with_error: adds error tag, cleans pipeline tags
 - _finalize_with_error: no error tag configured -> just cleans tags
 - _finalize_with_error: with content updates content
-- _log_ocr_stats: zero stats, normal stats, no get_stats method
+- _log_ocr_stats: zero stats, normal stats, empty stats
 - Images always closed (even on error)
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
@@ -165,7 +163,7 @@ class TestProcessClaimFails:
 class TestProcessErrorTagPresent:
     @patch("ocr.worker.release_processing_tag")
     @patch("ocr.worker.claim_processing_tag")
-    @patch("ocr.worker.clean_pipeline_tags")
+    @patch("common.tags.clean_pipeline_tags")
     def test_error_tag_skips_ocr(self, mock_clean, mock_claim, mock_release):
         # Arrange
         settings = _make_settings(ERROR_TAG_ID=552)
@@ -218,7 +216,7 @@ class TestProcessImageConversionFailure:
     @patch("ocr.worker.release_processing_tag")
     @patch("ocr.worker.claim_processing_tag", return_value=True)
     @patch("ocr.worker.bytes_to_images", side_effect=RuntimeError("Bad image"))
-    @patch("ocr.worker.clean_pipeline_tags")
+    @patch("common.tags.clean_pipeline_tags")
     def test_conversion_failure_finalizes_error(
         self, mock_clean, mock_b2i, mock_claim, mock_release
     ):
@@ -295,26 +293,6 @@ class TestProcessAlwaysReleasesLock:
 
 
 # -----------------------------------------------------------------------
-# _bytes_to_images
-# -----------------------------------------------------------------------
-
-class TestBytesToImages:
-    @patch("ocr.worker.bytes_to_images")
-    def test_delegates_to_image_converter(self, mock_b2i):
-        # Arrange
-        mock_b2i.return_value = [_make_image()]
-        settings = _make_settings(OCR_DPI=200)
-        proc = _make_processor(settings=settings)
-
-        # Act
-        result = proc._bytes_to_images(b"data", "image/png")
-
-        # Assert
-        mock_b2i.assert_called_once_with(b"data", "image/png", dpi=200)
-        assert len(result) == 1
-
-
-# -----------------------------------------------------------------------
 # _ocr_pages_in_parallel
 # -----------------------------------------------------------------------
 
@@ -374,45 +352,6 @@ class TestOcrPagesInParallel:
 
 
 # -----------------------------------------------------------------------
-# _assemble_full_text
-# -----------------------------------------------------------------------
-
-class TestAssembleFullText:
-    @patch("ocr.worker.assemble_full_text")
-    def test_delegates_to_text_assembly(self, mock_assemble):
-        # Arrange
-        mock_assemble.return_value = ("assembled", {"m1"})
-        settings = _make_settings(OCR_INCLUDE_PAGE_MODELS=True)
-        proc = _make_processor(settings=settings)
-        page_results = [("text", "m1")]
-
-        # Act
-        text, models = proc._assemble_full_text(1, page_results)
-
-        # Assert
-        mock_assemble.assert_called_once_with(
-            1, page_results, include_page_models=True
-        )
-        assert text == "assembled"
-        assert models == {"m1"}
-
-    @patch("ocr.worker.assemble_full_text")
-    def test_include_page_models_false(self, mock_assemble):
-        # Arrange
-        mock_assemble.return_value = ("text", set())
-        settings = _make_settings(OCR_INCLUDE_PAGE_MODELS=False)
-        proc = _make_processor(settings=settings)
-
-        # Act
-        proc._assemble_full_text(1, [])
-
-        # Assert
-        mock_assemble.assert_called_once_with(
-            1, [], include_page_models=False
-        )
-
-
-# -----------------------------------------------------------------------
 # _update_paperless_document — happy path
 # -----------------------------------------------------------------------
 
@@ -452,7 +391,7 @@ class TestUpdatePaperlessDocumentHappy:
 
 class TestUpdatePaperlessDocumentErrors:
     @patch("ocr.worker.get_latest_tags", return_value={443})
-    @patch("ocr.worker.clean_pipeline_tags", return_value=set())
+    @patch("common.tags.clean_pipeline_tags", return_value=set())
     def test_empty_text_marks_error(self, mock_clean, mock_get_tags):
         # Arrange
         settings = _make_settings(ERROR_TAG_ID=552)
@@ -468,7 +407,7 @@ class TestUpdatePaperlessDocumentErrors:
         assert 552 in tags_arg
 
     @patch("ocr.worker.get_latest_tags", return_value={443})
-    @patch("ocr.worker.clean_pipeline_tags", return_value=set())
+    @patch("common.tags.clean_pipeline_tags", return_value=set())
     def test_ocr_error_marker_in_text_marks_error(self, mock_clean, mock_get_tags):
         # Arrange
         settings = _make_settings(ERROR_TAG_ID=552)
@@ -486,7 +425,7 @@ class TestUpdatePaperlessDocumentErrors:
         assert 552 in tags_arg
 
     @patch("ocr.worker.get_latest_tags", return_value={443})
-    @patch("ocr.worker.clean_pipeline_tags", return_value=set())
+    @patch("common.tags.clean_pipeline_tags", return_value=set())
     def test_refusal_mark_in_text_marks_error(self, mock_clean, mock_get_tags):
         # Arrange
         settings = _make_settings(
@@ -507,7 +446,7 @@ class TestUpdatePaperlessDocumentErrors:
         assert 552 in tags_arg
 
     @patch("ocr.worker.get_latest_tags", return_value={443})
-    @patch("ocr.worker.clean_pipeline_tags", return_value=set())
+    @patch("common.tags.clean_pipeline_tags", return_value=set())
     def test_redacted_marker_in_text_marks_error(self, mock_clean, mock_get_tags):
         # Arrange
         settings = _make_settings(ERROR_TAG_ID=552)
@@ -528,7 +467,7 @@ class TestUpdatePaperlessDocumentErrors:
 # -----------------------------------------------------------------------
 
 class TestFinalizeWithError:
-    @patch("ocr.worker.clean_pipeline_tags")
+    @patch("common.tags.clean_pipeline_tags")
     def test_adds_error_tag(self, mock_clean):
         # Arrange
         mock_clean.return_value = {100}  # user tag preserved
@@ -545,7 +484,7 @@ class TestFinalizeWithError:
         assert 552 in call_tags  # error tag added
         assert 100 in call_tags  # user tag preserved
 
-    @patch("ocr.worker.clean_pipeline_tags")
+    @patch("common.tags.clean_pipeline_tags")
     def test_no_error_tag_configured(self, mock_clean):
         # Arrange
         mock_clean.return_value = {100}
@@ -561,7 +500,7 @@ class TestFinalizeWithError:
         call_tags = set(paperless.update_document_metadata.call_args[1]["tags"])
         assert 100 in call_tags
 
-    @patch("ocr.worker.clean_pipeline_tags")
+    @patch("common.tags.clean_pipeline_tags")
     def test_with_content_updates_document(self, mock_clean):
         # Arrange
         mock_clean.return_value = {552}
@@ -577,7 +516,7 @@ class TestFinalizeWithError:
         args = paperless.update_document.call_args[0]
         assert args[1] == "Error OCR text"
 
-    @patch("ocr.worker.clean_pipeline_tags")
+    @patch("common.tags.clean_pipeline_tags")
     def test_without_content_uses_metadata_update(self, mock_clean):
         # Arrange
         mock_clean.return_value = set()
@@ -637,14 +576,6 @@ class TestLogOcrStats:
         # Assert — stats fetched but NOT logged (zero attempts)
         ocr_provider.get_stats.assert_called_once()
         mock_log.info.assert_not_called()
-
-    def test_no_get_stats_method(self):
-        # Arrange — provider without get_stats
-        ocr_provider = MagicMock(spec=[])  # no attributes
-        proc = _make_processor(ocr_provider=ocr_provider)
-
-        # Act — should not raise
-        proc._log_ocr_stats()
 
     def test_empty_stats_dict(self):
         # Arrange

@@ -10,6 +10,8 @@ Library-level setup (OpenAI SDK, Pillow, httpx) lives in
 :mod:`common.library_setup` to keep this module free of side effects.
 """
 
+from __future__ import annotations
+
 import os
 from typing import Literal
 
@@ -188,18 +190,12 @@ class Settings:
         )
 
     def _get_required_env(self, var_name: str) -> str:
-        """
-        Gets a required environment variable, raising an error if it's not set.
-        """
         value = os.getenv(var_name)
         if value is None:
             raise ValueError(f"Required environment variable '{var_name}' is not set.")
         return value
 
     def _get_optional_int_env(self, var_name: str, default: int | None = None) -> int | None:
-        """
-        Gets an optional int environment variable. Empty values return the default.
-        """
         value = os.getenv(var_name)
         if value is None:
             return default
@@ -211,9 +207,6 @@ class Settings:
     def _get_optional_positive_int_env(
         self, var_name: str, default: int | None = None
     ) -> int | None:
-        """
-        Gets an optional positive int env var. Values <= 0 are treated as None.
-        """
         value = self._get_optional_int_env(var_name, default)
         if value is not None and value <= 0:
             return None

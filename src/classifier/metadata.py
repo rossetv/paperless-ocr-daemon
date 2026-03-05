@@ -63,6 +63,7 @@ def resolve_date_for_tags(
         try:
             return dt.date.fromisoformat(value.split("T")[0]).isoformat()
         except ValueError:
+            log.debug("Skipping unparseable date candidate", value=value)
             continue
     return dt.date.today().isoformat()
 

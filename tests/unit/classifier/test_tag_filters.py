@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import datetime as dt
 
-import pytest
-
 from classifier.tag_filters import (
     dedupe_tags,
     enrich_tags,

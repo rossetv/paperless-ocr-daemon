@@ -14,6 +14,8 @@ The provider is responsible for:
 5. Tracking per-document statistics (attempts, refusals, fallback successes).
 """
 
+from __future__ import annotations
+
 import base64
 import threading
 from abc import ABC, abstractmethod
@@ -25,10 +27,21 @@ from PIL import Image
 
 from common.config import Settings
 from common.llm import OpenAIChatMixin, unique_models
-from common.utils import contains_redacted_marker, is_blank
+from common.utils import contains_redacted_marker
 from .prompts import TRANSCRIPTION_PROMPT
 
 log = structlog.get_logger(__name__)
+
+
+def is_blank(image: Image.Image, threshold: int = 5) -> bool:
+    """Return ``True`` if the image is essentially blank (all white).
+
+    Converts to greyscale and checks that the number of non-white pixels
+    is below *threshold*.  Used to skip blank pages without wasting an
+    API call.
+    """
+    histogram = image.convert("L").histogram()
+    return (sum(histogram) - histogram[255]) < threshold
 
 
 def is_refusal(text: str, markers: list[str]) -> bool:
@@ -92,7 +105,7 @@ class OpenAIProvider(OpenAIChatMixin, OcrProvider):
         with self._stats_lock:
             self._stats[key] += 1
 
-    def get_stats(self) -> dict:
+    def get_stats(self) -> dict[str, int]:
         """Return a snapshot of OCR model stats for this provider instance."""
         with self._stats_lock:
             return dict(self._stats)

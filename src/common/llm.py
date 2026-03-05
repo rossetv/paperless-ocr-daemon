@@ -5,6 +5,8 @@ This module centralizes the OpenAI-compatible chat completion call so OCR and
 classification reuse the same retry behavior and logging patterns.
 """
 
+from __future__ import annotations
+
 import openai
 
 from .concurrency import llm_semaphore

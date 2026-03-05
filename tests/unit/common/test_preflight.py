@@ -55,7 +55,7 @@ class TestRunPreflightChecks:
         settings = make_settings_obj()
         client = MagicMock()
         client.ping.return_value = None
-        client.list_tags.side_effect = RuntimeError("API error")
+        client.list_tags.side_effect = OSError("API error")
 
         # Act — should not raise
         with patch(f"{MODULE}.openai") as mock_openai:
@@ -134,7 +134,7 @@ class TestRunPreflightChecks:
 
         # Act — LLM check fails but shouldn't raise
         with patch(f"{MODULE}.openai") as mock_openai:
-            mock_openai.models.list.side_effect = Exception("LLM down")
+            mock_openai.models.list.side_effect = OSError("LLM down")
             run_preflight_checks(settings, client)
 
         # Assert — we got here without exception

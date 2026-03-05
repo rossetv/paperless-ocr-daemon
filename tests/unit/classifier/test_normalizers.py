@@ -4,8 +4,6 @@ Comprehensive unit tests for classifier.normalizers module.
 
 from __future__ import annotations
 
-import pytest
-
 from classifier.normalizers import COMPANY_SUFFIXES, normalize_name, normalize_simple
 
 

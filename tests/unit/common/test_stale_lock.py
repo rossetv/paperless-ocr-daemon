@@ -7,9 +7,7 @@ non-integer doc IDs, and return count.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from common.stale_lock import recover_stale_locks
 

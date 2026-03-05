@@ -14,6 +14,8 @@ Noisy third-party loggers (``httpx``, ``openai``) are suppressed to ``WARNING``
 so they don't drown out application logs.
 """
 
+from __future__ import annotations
+
 import logging
 import sys
 import structlog

@@ -8,9 +8,8 @@ Everything else (image conversion, text assembly, tag logic) is real.
 from __future__ import annotations
 
 import io
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
-import pytest
 from PIL import Image
 
 from ocr.worker import DocumentProcessor

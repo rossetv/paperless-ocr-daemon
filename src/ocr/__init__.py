@@ -11,6 +11,8 @@ Modules
 - **prompts** — the system prompt sent to the vision-capable LLM.
 """
 
+from __future__ import annotations
+
 from .image_converter import bytes_to_images
 from .provider import OcrProvider, OpenAIProvider
 from .text_assembly import OCR_ERROR_MARKER, assemble_full_text

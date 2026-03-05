@@ -10,7 +10,7 @@ before_each_batch).
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -172,7 +172,7 @@ class TestIterDocsSkipsAlreadyClassified:
         # Assert
         assert result == []
 
-    @patch("classifier.daemon.remove_stale_queue_tag")
+    @patch("common.tags.remove_stale_queue_tag")
     def test_removes_stale_pre_tag(self, mock_remove):
         # Arrange
         client = make_mock_paperless()
@@ -297,7 +297,6 @@ class TestProcessDocumentClosure:
 
         # Build mock instances
         mock_paperless_instance = make_mock_paperless()
-        mock_provider_instance = MagicMock()
         # PaperlessClient is called for taxonomy_client and then per-doc
         mock_client_cls.side_effect = [MagicMock(), mock_paperless_instance]
 

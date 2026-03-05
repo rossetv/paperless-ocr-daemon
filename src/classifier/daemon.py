@@ -19,7 +19,7 @@ from common.bootstrap import bootstrap_daemon
 from common.config import Settings
 from common.daemon_loop import run_polling_threadpool
 from common.paperless import PaperlessClient
-from common.tags import extract_tags, remove_stale_queue_tag
+from common.tags import iter_documents_by_pipeline_tag
 from .provider import ClassificationProvider
 from .taxonomy import TaxonomyCache
 from .worker import ClassificationProcessor
@@ -31,40 +31,16 @@ def _iter_docs_to_classify(
     """
     Yield documents that should be classified.
 
-    Tag hygiene: if a document already has the classify-post-tag but still
-    carries the classify-pre-tag, the stale tags are removed and the document
-    is skipped.  Documents already claimed by a processing-lock tag are also
-    skipped.
+    Delegates to the shared :func:`~common.tags.iter_documents_by_pipeline_tag`
+    helper with classification-specific tag IDs.
     """
-    log = structlog.get_logger(__name__)
-    for doc in list_client.get_documents_by_tag(settings.CLASSIFY_PRE_TAG_ID):
-        doc_id = doc.get("id")
-        if not isinstance(doc_id, int):
-            log.warning("Skipping document without integer id", doc_id=doc_id)
-            continue
-
-        tags = extract_tags(doc, doc_id=doc_id, context="classify-iter")
-
-        # Already classified — remove stale queue and processing tags
-        if settings.CLASSIFY_POST_TAG_ID and settings.CLASSIFY_POST_TAG_ID in tags:
-            if settings.CLASSIFY_PRE_TAG_ID in tags:
-                remove_stale_queue_tag(
-                    list_client,
-                    doc_id,
-                    tags,
-                    pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
-                    processing_tag_id=settings.CLASSIFY_PROCESSING_TAG_ID,
-                )
-            continue
-
-        # Already claimed by another worker
-        if (
-            settings.CLASSIFY_PROCESSING_TAG_ID
-            and settings.CLASSIFY_PROCESSING_TAG_ID in tags
-        ):
-            continue
-
-        yield doc
+    return iter_documents_by_pipeline_tag(
+        list_client,
+        pre_tag_id=settings.CLASSIFY_PRE_TAG_ID,
+        post_tag_id=settings.CLASSIFY_POST_TAG_ID,
+        processing_tag_id=settings.CLASSIFY_PROCESSING_TAG_ID,
+        context="classify-iter",
+    )
 
 
 def main() -> None:

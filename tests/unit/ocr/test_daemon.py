@@ -14,7 +14,7 @@ Tests cover:
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -195,7 +195,7 @@ class TestIterDocsToOcrSkipsNonIntegerId:
 # -----------------------------------------------------------------------
 
 class TestIterDocsToOcrSkipsPostTagged:
-    @patch("ocr.daemon.remove_stale_queue_tag")
+    @patch("common.tags.remove_stale_queue_tag")
     def test_skips_doc_with_post_tag_and_removes_stale_pre(self, mock_remove):
         # Arrange
         settings = _make_settings(
@@ -220,7 +220,7 @@ class TestIterDocsToOcrSkipsPostTagged:
             processing_tag_id=999,
         )
 
-    @patch("ocr.daemon.remove_stale_queue_tag")
+    @patch("common.tags.remove_stale_queue_tag")
     def test_skips_doc_with_post_tag_without_pre_tag(self, mock_remove):
         # Arrange — has post tag but not pre tag (shouldn't call remove)
         settings = _make_settings(
@@ -285,7 +285,7 @@ class TestIterDocsToOcrSkipsClaimed:
 # -----------------------------------------------------------------------
 
 class TestIterDocsToOcrMixed:
-    @patch("ocr.daemon.remove_stale_queue_tag")
+    @patch("common.tags.remove_stale_queue_tag")
     def test_mixed_bag_of_documents(self, mock_remove):
         # Arrange
         settings = _make_settings(

@@ -95,6 +95,7 @@ def retry(
                         max_retries=settings.MAX_RETRIES,
                     )
                     _sleep_backoff(attempt, settings)
+            raise RuntimeError("unreachable: retry loop exited without return or raise")
 
         return wrapper
 

@@ -6,9 +6,7 @@ All external dependencies are mocked to test control flow and error handling.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from common.bootstrap import bootstrap_daemon
 from common.preflight import PreflightError

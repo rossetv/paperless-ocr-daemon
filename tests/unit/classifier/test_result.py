@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from classifier.result import ClassificationResult, _extract_json, parse_classification_response
+from classifier.result import _extract_json, parse_classification_response
 
 
 # ---------------------------------------------------------------------------

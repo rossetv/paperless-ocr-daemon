@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import re
 
-from .constants import MODEL_FOOTER_RE, PAGE_HEADER_RE
+from .constants import PAGE_HEADER_RE
 
 # Matches one or more digits — used to extract page numbers from headers.
 _DIGITS_RE: re.Pattern[str] = re.compile(r"\d+")
@@ -166,7 +166,9 @@ def truncate_content_by_pages(
     if total_pages <= max_pages:
         return body + footer, None
 
-    # Slice the body into per-page segments
+    # Slice the body into per-page segments.
+    # The first segment starts at 0 (capturing any preamble before the first
+    # page header); subsequent segments start at their header's match position.
     segments: list[str] = []
     for idx, match in enumerate(matches):
         start = 0 if idx == 0 else match.start()

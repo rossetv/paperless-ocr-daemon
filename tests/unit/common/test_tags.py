@@ -7,9 +7,7 @@ release_processing_tag, and clean_pipeline_tags.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from common.tags import (
     clean_pipeline_tags,
@@ -134,7 +132,7 @@ class TestGetLatestTags:
     def test_returns_empty_set_when_exception_and_fallback_is_none(self):
         # Arrange
         client = MagicMock()
-        client.get_document.side_effect = RuntimeError("fail")
+        client.get_document.side_effect = OSError("fail")
 
         # Act
         result = get_latest_tags(client, doc_id=42, fallback_doc=None)

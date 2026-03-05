@@ -16,10 +16,10 @@ Tests cover:
 from __future__ import annotations
 
 from io import BytesIO
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from ocr.image_converter import bytes_to_images
 

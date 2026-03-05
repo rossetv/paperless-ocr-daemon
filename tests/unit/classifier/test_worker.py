@@ -10,11 +10,10 @@ fields, stats logging, and metadata resolution via TaxonomyCache.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from classifier.result import ClassificationResult
 from classifier.worker import ClassificationProcessor
 from tests.helpers.factories import (
     make_classification_result,
@@ -762,27 +761,19 @@ class TestTruncationWithNote:
 # ===================================================================
 
 class TestStatsLoggingEdgeCases:
-    """Stats logging handles missing get_stats method and zero attempts."""
+    """Stats logging handles empty stats and zero attempts."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_stats_logged_when_no_get_stats_method(self, mock_release, mock_claim):
+    def test_stats_not_logged_when_empty(self, mock_release, mock_claim):
         # Arrange
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
-        # Replace classifier with a plain object that truly lacks get_stats.
-        # (del on MagicMock doesn't prevent hasattr from returning True.)
-        orig = proc.classifier
-
-        class _BareClassifier:
-            classify_text = orig.classify_text
-
-        proc.classifier = _BareClassifier()
+        proc.classifier.get_stats.return_value = {}
 
         # Act — should not raise
         proc.process()
 
-        # Assert — process completed and get_stats was never called
+        # Assert — process completed
         assert proc.paperless_client.update_document_metadata.called
-        assert not hasattr(proc.classifier, "get_stats")

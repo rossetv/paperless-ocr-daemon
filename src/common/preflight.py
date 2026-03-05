@@ -12,7 +12,9 @@ Fatal errors (Paperless unreachable) prevent startup.  Non-fatal warnings
 
 from __future__ import annotations
 
+import httpx
 import openai
+from openai import APIError as OpenAIAPIError
 import structlog
 
 from .config import Settings
@@ -37,7 +39,7 @@ def _check_paperless_reachable(settings: Settings, client: PaperlessClient) -> N
     try:
         client.ping(timeout=10)
         log.info("Preflight: Paperless-ngx API is reachable", url=settings.PAPERLESS_URL)
-    except Exception as exc:
+    except (OSError, httpx.HTTPError) as exc:
         raise PreflightError(
             f"Paperless-ngx API is not reachable at {settings.PAPERLESS_URL}: {exc}"
         ) from exc
@@ -47,7 +49,7 @@ def _check_tag_ids_exist(settings: Settings, client: PaperlessClient) -> None:
     """Verify that all configured tag IDs exist in Paperless."""
     try:
         all_tags = client.list_tags()
-    except Exception:
+    except (OSError, httpx.HTTPError):
         log.warning("Preflight: Could not fetch tags from Paperless; skipping tag validation")
         return
 
@@ -81,7 +83,7 @@ def _check_llm_reachable() -> None:
     try:
         openai.models.list()
         log.info("Preflight: LLM provider is reachable")
-    except Exception as exc:
+    except (OpenAIAPIError, OSError) as exc:
         log.warning(
             "Preflight: LLM provider is not reachable; "
             "the daemon will retry when processing documents",

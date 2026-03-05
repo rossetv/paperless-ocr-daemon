@@ -91,9 +91,6 @@ class TestFullOcrPipeline:
 
     def test_multi_page_with_page_model_headers(self):
         """Verify include_page_models adds model names to page headers."""
-        png_bytes = _make_png_bytes()
-        images = bytes_to_images(png_bytes, "image/png")
-
         # Simulate a 2-page document
         page_results = [
             ("First page.", "gpt-5-mini"),

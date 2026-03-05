@@ -7,7 +7,6 @@ provider configuration, httpx client creation, and atexit registration.
 
 from __future__ import annotations
 
-import atexit
 from unittest.mock import MagicMock, patch
 
 import httpx
