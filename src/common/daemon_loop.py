@@ -6,12 +6,16 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, TypeVar
 
-import httpx
 import structlog
 
+from .paperless import PAPERLESS_CALL_EXCEPTIONS
 from .shutdown import is_shutdown_requested
 
 log = structlog.get_logger(__name__)
+
+# Daemon-level fault isolation: catch everything in PAPERLESS_CALL_EXCEPTIONS
+# plus RuntimeError (e.g. uninitialised client) and TypeError (unexpected data).
+_DAEMON_LOOP_EXCEPTIONS = PAPERLESS_CALL_EXCEPTIONS + (RuntimeError, TypeError)
 
 T = TypeVar("T")
 
@@ -103,7 +107,7 @@ def run_polling_threadpool(
                 was_idle=was_idle,
             )
             sleep(poll_interval_seconds)
-        except (OSError, httpx.HTTPError, RuntimeError, ValueError, TypeError, KeyError) as exc:
+        except _DAEMON_LOOP_EXCEPTIONS as exc:
             log.error(
                 "Unexpected error in daemon loop; sleeping",
                 daemon=daemon_name,

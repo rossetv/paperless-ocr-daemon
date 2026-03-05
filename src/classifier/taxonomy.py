@@ -5,10 +5,9 @@ from __future__ import annotations
 import threading
 from typing import Callable, Iterable, NamedTuple
 
-import httpx
 import structlog
 
-from common.paperless import PaperlessClient
+from common.paperless import PAPERLESS_CALL_EXCEPTIONS, PaperlessClient
 from .normalizers import normalize_name, normalize_simple
 from .tag_filters import dedupe_tags
 
@@ -190,7 +189,7 @@ class TaxonomyCache:
                 return matched.get("id")
             try:
                 created = kind.creator(name.strip())
-            except (httpx.HTTPStatusError, httpx.RequestError, OSError):
+            except PAPERLESS_CALL_EXCEPTIONS:
                 log.warning(
                     "Failed to create item; refreshing cache",
                     item_label=kind.label,
@@ -233,7 +232,7 @@ class TaxonomyCache:
                     created = self._client.create_tag(
                         tag.strip(), matching_algorithm=matching_algorithm
                     )
-                except (httpx.HTTPStatusError, httpx.RequestError, OSError):
+                except PAPERLESS_CALL_EXCEPTIONS:
                     log.warning("Failed to create tag; refreshing cache", name=tag)
                     self.refresh()
                     matching_algorithm = self._infer_matching_algorithm()
