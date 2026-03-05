@@ -24,7 +24,12 @@ import structlog
 from common.claims import claim_processing_tag
 from common.config import Settings
 from common.paperless import PaperlessClient
-from common.tags import clean_pipeline_tags, release_processing_tag
+from common.tags import (
+    clean_pipeline_tags,
+    extract_tags,
+    finalize_document_with_error,
+    release_processing_tag,
+)
 from .content_prep import (
     truncate_content_by_chars,
     truncate_content_by_pages,
@@ -100,7 +105,7 @@ class ClassificationProcessor:
         try:
             document = self.paperless_client.get_document(self.doc_id)
             content = document.get("content", "") or ""
-            current_tags = set(document.get("tags") or [])
+            current_tags = extract_tags(document, doc_id=self.doc_id, context="classify-process")
 
             if self.settings.ERROR_TAG_ID and self.settings.ERROR_TAG_ID in current_tags:
                 log.warning(
@@ -226,22 +231,18 @@ class ClassificationProcessor:
         log.info("Requeued document for OCR", doc_id=self.doc_id)
 
     def _finalize_with_error(self, tags: set[int]) -> None:
-        """Mark the document with an error tag and clear pipeline tags."""
-        updated = clean_pipeline_tags(tags, self.settings)
-        if self.settings.ERROR_TAG_ID:
-            updated.add(self.settings.ERROR_TAG_ID)
-        self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
-        if self.settings.ERROR_TAG_ID:
-            log.warning(
-                "Marked document as classification error",
-                doc_id=self.doc_id,
-                error_tag_id=self.settings.ERROR_TAG_ID,
-            )
-        else:
-            log.warning(
-                "Classification failed; removed pipeline tags (no error tag configured)",
-                doc_id=self.doc_id,
-            )
+        """
+        Mark the document with an error tag and clear pipeline tags.
+
+        Delegates to :func:`common.tags.finalize_document_with_error`.
+        """
+        finalize_document_with_error(
+            self.paperless_client,
+            self.doc_id,
+            tags,
+            self.settings,
+            log,
+        )
 
     # ------------------------------------------------------------------
     # Classification application
@@ -261,7 +262,7 @@ class ClassificationProcessor:
                 "OCR content contains refusal markers; marking error",
                 doc_id=self.doc_id,
             )
-            self._finalize_with_error(set(document.get("tags", [])))
+            self._finalize_with_error(extract_tags(document, doc_id=self.doc_id, context="classify-apply"))
             return
 
         parsed_date = parse_document_date(result.document_date)
@@ -297,7 +298,7 @@ class ClassificationProcessor:
         )
 
         # Merge new tag IDs with cleaned existing tags
-        current_tags = clean_pipeline_tags(set(document.get("tags", [])), self.settings)
+        current_tags = clean_pipeline_tags(extract_tags(document, doc_id=self.doc_id, context="classify-apply"), self.settings)
         if self.settings.CLASSIFY_POST_TAG_ID:
             current_tags.add(self.settings.CLASSIFY_POST_TAG_ID)
         current_tags.update(tag_ids)
@@ -337,9 +338,7 @@ class ClassificationProcessor:
     # ------------------------------------------------------------------
 
     def _log_classification_stats(self) -> None:
-        """Log classification model stats if the provider exposes them."""
-        if not hasattr(self.classifier, "get_stats"):
-            return
+        """Log classification model stats."""
         stats = self.classifier.get_stats()
         if not stats or not stats.get("attempts"):
             return

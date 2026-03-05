@@ -4,8 +4,6 @@ Comprehensive unit tests for classifier.constants module.
 
 from __future__ import annotations
 
-import pytest
-
 from classifier.constants import (
     BLACKLISTED_TAGS,
     ERROR_PHRASES,

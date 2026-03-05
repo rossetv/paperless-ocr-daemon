@@ -29,7 +29,7 @@ from common.bootstrap import bootstrap_daemon
 from common.config import Settings
 from common.daemon_loop import run_polling_threadpool
 from common.paperless import PaperlessClient
-from common.tags import extract_tags, remove_stale_queue_tag
+from common.tags import iter_documents_by_pipeline_tag
 from .provider import OpenAIProvider
 from .worker import DocumentProcessor
 
@@ -54,37 +54,16 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
     """
     Yield documents that should be OCR'd.
 
-    Tag hygiene: if a document already has the post-tag but still carries the
-    pre-tag, the stale pre-tag is removed and the document is skipped.
-    Documents that already have the processing-lock tag are also skipped to
-    reduce duplicate work.
+    Delegates to the shared :func:`~common.tags.iter_documents_by_pipeline_tag`
+    helper with OCR-specific tag IDs.
     """
-    log = structlog.get_logger(__name__)
-    for doc in list_client.get_documents_by_tag(settings.PRE_TAG_ID):
-        doc_id = doc.get("id")
-        if not isinstance(doc_id, int):
-            log.warning("Skipping document without integer id", doc_id=doc_id)
-            continue
-
-        tags = extract_tags(doc, doc_id=doc_id, context="ocr-iter")
-
-        # Already processed — remove the stale queue tag
-        if settings.POST_TAG_ID in tags:
-            if settings.PRE_TAG_ID in tags:
-                remove_stale_queue_tag(
-                    list_client,
-                    doc_id,
-                    tags,
-                    pre_tag_id=settings.PRE_TAG_ID,
-                    processing_tag_id=settings.OCR_PROCESSING_TAG_ID,
-                )
-            continue
-
-        # Already claimed by another worker
-        if settings.OCR_PROCESSING_TAG_ID and settings.OCR_PROCESSING_TAG_ID in tags:
-            continue
-
-        yield doc
+    return iter_documents_by_pipeline_tag(
+        list_client,
+        pre_tag_id=settings.PRE_TAG_ID,
+        post_tag_id=settings.POST_TAG_ID,
+        processing_tag_id=settings.OCR_PROCESSING_TAG_ID,
+        context="ocr-iter",
+    )
 
 
 def main() -> None:

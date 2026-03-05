@@ -6,8 +6,6 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
 from classifier.content_prep import (
     _extract_page_numbers,
     _format_page_ranges,

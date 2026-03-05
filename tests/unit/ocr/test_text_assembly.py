@@ -15,8 +15,6 @@ Tests cover:
 
 from __future__ import annotations
 
-import pytest
-
 from ocr.text_assembly import OCR_ERROR_MARKER, assemble_full_text
 
 

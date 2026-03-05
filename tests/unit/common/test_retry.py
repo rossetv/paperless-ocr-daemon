@@ -7,7 +7,7 @@ exponential backoff with jitter, backoff capping, and ``@wraps`` preservation.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -66,10 +66,7 @@ class TestRetryAfterTransientFailure:
 
     @patch("common.retry._sleep_backoff")
     def test_retries_then_succeeds(self, mock_sleep):
-        client = _Client(_FakeSettings(max_retries=5))
         call_count = 0
-
-        original_flaky = _Client.flaky.__wrapped__  # type: ignore[attr-defined]
 
         def side_effect(self_inner, value):
             nonlocal call_count
@@ -265,7 +262,6 @@ class TestBackoffCap:
 class TestWraps:
 
     def test_function_name_preserved(self):
-        client = _Client()
         # The method on the class should preserve the original name
         assert _Client.flaky.__name__ == "flaky"
 

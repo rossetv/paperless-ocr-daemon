@@ -4,10 +4,10 @@ Comprehensive unit tests for common.utils module.
 
 from __future__ import annotations
 
-import pytest
 from PIL import Image
 
-from common.utils import contains_redacted_marker, is_blank, is_error_content
+from common.utils import contains_redacted_marker, is_error_content
+from ocr.provider import is_blank
 
 
 # ---------------------------------------------------------------------------

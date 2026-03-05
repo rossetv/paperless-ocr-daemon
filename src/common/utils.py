@@ -1,11 +1,10 @@
 """
-Text and image content helpers.
+Text content helpers.
 
-Domain-specific utility functions for detecting blank pages, redaction
-markers, and error/refusal content in OCR output.  These are used by
-both the OCR and classification pipelines.
+Domain-specific utility functions for detecting redaction markers and
+error/refusal content in OCR output.  These are used by both the OCR and
+classification pipelines.
 
-- :func:`is_blank` — detects near-white images that should be skipped.
 - :func:`contains_redacted_marker` — detects ``[REDACTED ...]`` markers.
 - :func:`is_error_content` — combines refusal-phrase and redaction detection.
 
@@ -17,30 +16,10 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
-from PIL import Image
-
 # Pre-compiled at module level for efficiency — matches bracketed text
 # containing the word "redacted" in any case, e.g. "[REDACTED]",
 # "[NAME REDACTED]", "[REDACTED ADDRESS]".
 _REDACTED_RE = re.compile(r"\[[^\]]*redacted[^\]]*\]", re.IGNORECASE)
-
-
-def is_blank(image: Image.Image, threshold: int = 5) -> bool:
-    """Return ``True`` if the image is essentially blank (all white).
-
-    Converts to greyscale and checks that the number of non-white pixels
-    is below *threshold*.  Used by the OCR provider to skip blank pages
-    without wasting an API call.
-
-    Args:
-        image: A PIL Image to test.
-        threshold: Maximum number of non-white pixels allowed.
-
-    Returns:
-        ``True`` if the image is blank.
-    """
-    histogram = image.convert("L").histogram()
-    return (sum(histogram) - histogram[255]) < threshold
 
 
 def contains_redacted_marker(text: str) -> bool:

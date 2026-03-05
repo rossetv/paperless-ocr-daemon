@@ -657,7 +657,7 @@ class TestCreateNamedItemUnexpectedType:
             route = respx.post(f"{BASE}/api/tags/")
             route.mock(return_value=httpx.Response(201, json={"id": 5, "name": "Z"}))
             client = _make_client()
-            result = client.create_tag("Z", matching_algorithm=3.14)
+            client.create_tag("Z", matching_algorithm=3.14)
         body = json_mod.loads(route.calls[0].request.content)
         assert body["matching_algorithm"] == 3.14
         client.close()

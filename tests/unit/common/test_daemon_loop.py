@@ -7,9 +7,7 @@ idle logging, shutdown, clamping) and _safe_item_summary.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from common.daemon_loop import _safe_item_summary, run_polling_threadpool
 

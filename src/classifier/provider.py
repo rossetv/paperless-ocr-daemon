@@ -15,6 +15,7 @@ API to classify a document's OCR text.  It handles:
 from __future__ import annotations
 
 import json
+import threading
 
 import openai
 import structlog
@@ -42,6 +43,7 @@ class ClassificationProvider(OpenAIChatMixin):
     def __init__(self, settings: Settings):
         self.settings = settings
         self._stats: dict[str, int] = {}
+        self._stats_lock = threading.Lock()
 
     # ------------------------------------------------------------------
     # Stats
@@ -49,19 +51,26 @@ class ClassificationProvider(OpenAIChatMixin):
 
     def _reset_stats(self) -> None:
         """Reset per-call classification counters."""
-        self._stats = {
-            "attempts": 0,
-            "api_errors": 0,
-            "invalid_json": 0,
-            "fallback_successes": 0,
-            "temperature_retries": 0,
-            "response_format_retries": 0,
-            "max_tokens_retries": 0,
-        }
+        with self._stats_lock:
+            self._stats = {
+                "attempts": 0,
+                "api_errors": 0,
+                "invalid_json": 0,
+                "fallback_successes": 0,
+                "temperature_retries": 0,
+                "response_format_retries": 0,
+                "max_tokens_retries": 0,
+            }
 
-    def get_stats(self) -> dict:
+    def _inc_stat(self, key: str) -> None:
+        """Thread-safe increment of a stats counter."""
+        with self._stats_lock:
+            self._stats[key] += 1
+
+    def get_stats(self) -> dict[str, int]:
         """Return a snapshot of classification stats for this provider instance."""
-        return dict(self._stats)
+        with self._stats_lock:
+            return dict(self._stats)
 
     # ------------------------------------------------------------------
     # Parameter compatibility helpers
@@ -120,7 +129,7 @@ class ClassificationProvider(OpenAIChatMixin):
         compat_retries = 0
         while True:
             try:
-                self._stats["attempts"] += 1
+                self._inc_stat("attempts")
                 return self._create_completion(**params)
             except openai.BadRequestError as e:
                 # Try compat adjustments only while below the retry bound.
@@ -130,7 +139,7 @@ class ClassificationProvider(OpenAIChatMixin):
                             "Model does not support temperature; retrying with defaults",
                             model=model,
                         )
-                        self._stats["temperature_retries"] += 1
+                        self._inc_stat("temperature_retries")
                         params = dict(params)
                         params.pop("temperature", None)
                         compat_retries += 1
@@ -140,7 +149,7 @@ class ClassificationProvider(OpenAIChatMixin):
                             "Model does not support response_format; retrying without it",
                             model=model,
                         )
-                        self._stats["response_format_retries"] += 1
+                        self._inc_stat("response_format_retries")
                         params = dict(params)
                         params.pop("response_format", None)
                         compat_retries += 1
@@ -150,18 +159,18 @@ class ClassificationProvider(OpenAIChatMixin):
                             "Model does not support max_tokens; retrying without it",
                             model=model,
                         )
-                        self._stats["max_tokens_retries"] += 1
+                        self._inc_stat("max_tokens_retries")
                         params = dict(params)
                         params.pop("max_tokens", None)
                         compat_retries += 1
                         continue
                 # Unrecognized error or compat retries exhausted — give up.
                 log.warning("Classification request rejected", model=model, error=e)
-                self._stats["api_errors"] += 1
+                self._inc_stat("api_errors")
                 return None
             except openai.APIError as e:
                 log.warning("Classification model failed", model=model, error=e)
-                self._stats["api_errors"] += 1
+                self._inc_stat("api_errors")
                 return None
 
     # ------------------------------------------------------------------
@@ -208,7 +217,7 @@ class ClassificationProvider(OpenAIChatMixin):
                 content = response.choices[0].message.content or ""
                 result = parse_classification_response(content)
                 if model != primary_model:
-                    self._stats["fallback_successes"] += 1
+                    self._inc_stat("fallback_successes")
                 return result, model
             except (json.JSONDecodeError, ValueError) as e:
                 log.warning(
@@ -216,7 +225,7 @@ class ClassificationProvider(OpenAIChatMixin):
                     model=model,
                     error=str(e),
                 )
-                self._stats["invalid_json"] += 1
+                self._inc_stat("invalid_json")
                 continue
 
         log.error("All classification models failed")

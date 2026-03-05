@@ -18,11 +18,9 @@ Tests cover:
 from __future__ import annotations
 
 import threading
-from io import BytesIO
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import openai
-import pytest
 from PIL import Image
 
 from ocr.provider import OpenAIProvider, is_refusal

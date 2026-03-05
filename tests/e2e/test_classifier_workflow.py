@@ -9,9 +9,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
-from classifier.result import ClassificationResult
 from classifier.taxonomy import TaxonomyCache
 from classifier.worker import ClassificationProcessor
 from tests.helpers.factories import (

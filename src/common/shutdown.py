@@ -27,17 +27,14 @@ _shutdown_event = threading.Event()
 
 
 def request_shutdown() -> None:
-    """Signal that the daemon should stop after the current batch."""
     _shutdown_event.set()
 
 
 def is_shutdown_requested() -> bool:
-    """Return ``True`` when a graceful shutdown has been requested."""
     return _shutdown_event.is_set()
 
 
 def reset_shutdown() -> None:
-    """Clear the shutdown flag (useful for tests)."""
     _shutdown_event.clear()
 
 

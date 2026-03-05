@@ -10,8 +10,6 @@ from __future__ import annotations
 import datetime as dt
 from unittest.mock import MagicMock
 
-import pytest
-
 from classifier.content_prep import truncate_content_by_pages
 from classifier.metadata import (
     is_empty_classification,
@@ -20,7 +18,7 @@ from classifier.metadata import (
     resolve_date_for_tags,
     update_custom_fields,
 )
-from classifier.result import ClassificationResult, parse_classification_response
+from classifier.result import parse_classification_response
 from classifier.tag_filters import (
     enrich_tags,
     filter_blacklisted_tags,
