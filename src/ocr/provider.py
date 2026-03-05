@@ -81,6 +81,10 @@ class OcrProvider(ABC):
         """
         raise NotImplementedError
 
+    def get_stats(self) -> dict[str, int]:
+        """Return provider stats. Override in subclasses that track stats."""
+        return {}
+
 
 class OpenAIProvider(OpenAIChatMixin, OcrProvider):
     """

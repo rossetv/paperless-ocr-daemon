@@ -262,7 +262,7 @@ class ClassificationProcessor:
                 "OCR content contains refusal markers; marking error",
                 doc_id=self.doc_id,
             )
-            self._finalize_with_error(set(document.get("tags", [])))
+            self._finalize_with_error(extract_tags(document, doc_id=self.doc_id, context="classify-apply"))
             return
 
         parsed_date = parse_document_date(result.document_date)
@@ -298,7 +298,7 @@ class ClassificationProcessor:
         )
 
         # Merge new tag IDs with cleaned existing tags
-        current_tags = clean_pipeline_tags(set(document.get("tags", [])), self.settings)
+        current_tags = clean_pipeline_tags(extract_tags(document, doc_id=self.doc_id, context="classify-apply"), self.settings)
         if self.settings.CLASSIFY_POST_TAG_ID:
             current_tags.add(self.settings.CLASSIFY_POST_TAG_ID)
         current_tags.update(tag_ids)
