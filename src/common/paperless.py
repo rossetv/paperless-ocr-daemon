@@ -142,15 +142,15 @@ class PaperlessClient:
         log.info("Successfully updated document", doc_id=doc_id)
 
     # Maps keyword argument names to Paperless API field names.
-    _METADATA_FIELDS: dict[str, str] = {
-        "title": "title",
-        "correspondent_id": "correspondent",
-        "document_type_id": "document_type",
-        "document_date": "created",
-        "tags": "tags",
-        "language": "language",
-        "custom_fields": "custom_fields",
-    }
+    _METADATA_FIELDS: tuple[tuple[str, str], ...] = (
+        ("title", "title"),
+        ("correspondent_id", "correspondent"),
+        ("document_type_id", "document_type"),
+        ("document_date", "created"),
+        ("tags", "tags"),
+        ("language", "language"),
+        ("custom_fields", "custom_fields"),
+    )
 
     def update_document_metadata(
         self,
@@ -167,7 +167,7 @@ class PaperlessClient:
         local_vars = locals()
         payload = {
             api_key: local_vars[param]
-            for param, api_key in self._METADATA_FIELDS.items()
+            for param, api_key in self._METADATA_FIELDS
             if local_vars[param] is not None
         }
 

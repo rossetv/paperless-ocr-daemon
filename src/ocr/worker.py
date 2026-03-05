@@ -97,8 +97,8 @@ class DocumentProcessor:
                 for image in images:
                     try:
                         image.close()
-                    except Exception:
-                        log.warning("Failed to close image", doc_id=self.doc_id)
+                    except OSError:
+                        log.warning("Failed to close image", doc_id=self.doc_id, exc_info=True)
 
             if failed_pages:
                 log.warning(

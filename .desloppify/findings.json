@@ -1,0 +1,45 @@
+{
+  "assessments": {
+    "cross_module_architecture": 94,
+    "convention_outlier": 96,
+    "error_consistency": 94,
+    "abstraction_fitness": 94,
+    "dependency_health": 93,
+    "test_strategy": 88,
+    "ai_generated_debt": 94,
+    "package_organization": 94,
+    "high_level_elegance": 93,
+    "mid_level_elegance": 94,
+    "low_level_elegance": 94,
+    "design_coherence": 96
+  },
+  "findings": [
+    {
+      "dimension": "error_consistency",
+      "identifier": "best_effort_cleanup_swallows",
+      "summary": "Tag cleanup functions catch and swallow I/O errors. Callers cannot tell if cleanup succeeded.",
+      "evidence": [
+        "release_processing_tag and remove_stale_queue_tag in src/common/tags.py catch (OSError, httpx.HTTPError) and log but never propagate."
+      ],
+      "suggestion": "This is intentional best-effort cleanup and acceptable for background tag operations.",
+      "related_files": [
+        "src/common/tags.py"
+      ],
+      "confidence": "low"
+    },
+    {
+      "dimension": "error_consistency",
+      "identifier": "compat_none_vs_exception",
+      "summary": "_create_with_compat returns None on failure while _create_completion raises on exhausted retries.",
+      "evidence": [
+        "_create_with_compat catches BadRequestError and APIError returning None, while the retry decorator in _create_completion raises after max retries."
+      ],
+      "suggestion": "The None return is intentional to enable model fallback in the caller loop.",
+      "related_files": [
+        "src/classifier/provider.py",
+        "src/common/llm.py"
+      ],
+      "confidence": "medium"
+    }
+  ]
+}
