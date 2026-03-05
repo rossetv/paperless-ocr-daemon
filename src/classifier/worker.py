@@ -44,12 +44,11 @@ from .metadata import (
 )
 from .provider import ClassificationProvider
 from .result import ClassificationResult
+from .quality_gates import is_generic_document_type, needs_error_tag
 from .tag_filters import (
     enrich_tags,
     filter_blacklisted_tags,
     filter_redundant_tags,
-    is_generic_document_type,
-    needs_error_tag,
 )
 from .taxonomy import TaxonomyCache
 
@@ -248,6 +247,45 @@ class ClassificationProcessor:
     # Classification application
     # ------------------------------------------------------------------
 
+    def _build_tag_names(
+        self,
+        result: ClassificationResult,
+        content: str,
+        date_for_tags: str,
+    ) -> list[str]:
+        """Build the filtered and enriched tag name list from classification output."""
+        base_tags = filter_blacklisted_tags(result.tags)
+        base_tags = filter_redundant_tags(
+            base_tags,
+            result.correspondent,
+            result.document_type,
+            result.person,
+        )
+        return enrich_tags(
+            base_tags,
+            content,
+            date_for_tags,
+            self.settings.CLASSIFY_DEFAULT_COUNTRY_TAG,
+            self.settings.CLASSIFY_TAG_LIMIT,
+        )
+
+    def _resolve_taxonomy_ids(
+        self, result: ClassificationResult, tag_names: list[str]
+    ) -> tuple[list[int], int | None, int | None]:
+        """Resolve tag names and classification fields to Paperless IDs."""
+        tag_ids = self.taxonomy_cache.get_or_create_tag_ids(tag_names)
+        correspondent_id = (
+            self.taxonomy_cache.get_or_create_correspondent_id(result.correspondent)
+            if result.correspondent
+            else None
+        )
+        document_type_id = (
+            self.taxonomy_cache.get_or_create_document_type_id(result.document_type)
+            if result.document_type
+            else None
+        )
+        return tag_ids, correspondent_id, document_type_id
+
     def _apply_classification(
         self,
         document: dict,
@@ -256,7 +294,6 @@ class ClassificationProcessor:
         model: str,
     ) -> None:
         """Apply the classifier's output to Paperless metadata and tags."""
-        # Guard: if the OCR content itself contains refusal markers, error out
         if needs_error_tag(content):
             log.warning(
                 "OCR content contains refusal markers; marking error",
@@ -268,33 +305,9 @@ class ClassificationProcessor:
         parsed_date = parse_document_date(result.document_date)
         date_for_tags = resolve_date_for_tags(parsed_date, document.get("created"))
 
-        # Build and filter the tag list
-        base_tags = filter_blacklisted_tags(result.tags)
-        base_tags = filter_redundant_tags(
-            base_tags,
-            result.correspondent,
-            result.document_type,
-            result.person,
-        )
-        tags = enrich_tags(
-            base_tags,
-            content,
-            date_for_tags,
-            self.settings.CLASSIFY_DEFAULT_COUNTRY_TAG,
-            self.settings.CLASSIFY_TAG_LIMIT,
-        )
-
-        # Resolve taxonomy items (creates missing ones in Paperless)
-        tag_ids = self.taxonomy_cache.get_or_create_tag_ids(tags)
-        correspondent_id = (
-            self.taxonomy_cache.get_or_create_correspondent_id(result.correspondent)
-            if result.correspondent
-            else None
-        )
-        document_type_id = (
-            self.taxonomy_cache.get_or_create_document_type_id(result.document_type)
-            if result.document_type
-            else None
+        tag_names = self._build_tag_names(result, content, date_for_tags)
+        tag_ids, correspondent_id, document_type_id = self._resolve_taxonomy_ids(
+            result, tag_names
         )
 
         # Merge new tag IDs with cleaned existing tags
@@ -303,7 +316,6 @@ class ClassificationProcessor:
             current_tags.add(self.settings.CLASSIFY_POST_TAG_ID)
         current_tags.update(tag_ids)
 
-        # Build custom fields payload (e.g. person name)
         custom_fields = None
         if self.settings.CLASSIFY_PERSON_FIELD_ID and result.person:
             custom_fields = update_custom_fields(

@@ -33,6 +33,63 @@ log = structlog.get_logger(__name__)
 T = TypeVar("T")
 
 
+def _process_batch(
+    items: list[T],
+    process_item: Callable[[T], None],
+    max_workers: int,
+    daemon_name: str,
+) -> None:
+    """Process a batch of work items concurrently using a thread pool.
+
+    Exceptions raised while processing one item are logged but do not
+    prevent other items from completing.
+    """
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_item = {
+            executor.submit(process_item, item): item for item in items
+        }
+        for future in as_completed(future_to_item):
+            item = future_to_item[future]
+            try:
+                future.result()
+            except Exception:
+                log.exception(
+                    "Work item failed",
+                    daemon=daemon_name,
+                    item=_safe_item_summary(item),
+                )
+
+
+def _poll_once(
+    *,
+    daemon_name: str,
+    fetch_work: Callable[[], list[T]],
+    process_item: Callable[[T], None],
+    max_workers: int,
+    before_each_batch: Callable[[list[T]], None] | None,
+    was_idle: bool,
+) -> bool:
+    """Execute a single poll iteration. Returns the new ``was_idle`` state."""
+    items = fetch_work()
+    if not items:
+        if not was_idle:
+            log.info("No work found; waiting", daemon=daemon_name)
+        return True
+
+    if before_each_batch is not None:
+        before_each_batch(items)
+
+    log.info(
+        "Processing batch",
+        daemon=daemon_name,
+        item_count=len(items),
+        max_workers=max_workers,
+    )
+
+    _process_batch(items, process_item, max_workers, daemon_name)
+    return False
+
+
 def run_polling_threadpool(
     *,
     daemon_name: str,
@@ -75,42 +132,14 @@ def run_polling_threadpool(
     was_idle = False
     while not is_shutdown_requested():
         try:
-            items = fetch_work()
-            if not items:
-                if not was_idle:
-                    log.info("No work found; waiting", daemon=daemon_name)
-                was_idle = True
-                sleep(poll_interval_seconds)
-                continue
-
-            was_idle = False
-            if before_each_batch is not None:
-                before_each_batch(items)
-
-            log.info(
-                "Processing batch",
-                daemon=daemon_name,
-                item_count=len(items),
+            was_idle = _poll_once(
+                daemon_name=daemon_name,
+                fetch_work=fetch_work,
+                process_item=process_item,
                 max_workers=max_workers,
+                before_each_batch=before_each_batch,
+                was_idle=was_idle,
             )
-
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_item = {
-                    executor.submit(process_item, item): item for item in items
-                }
-                for future in as_completed(future_to_item):
-                    item = future_to_item[future]
-                    try:
-                        future.result()
-                    except Exception:
-                        # Log and continue. The per-item processor decides whether
-                        # to mark Paperless tags, retry via next poll, etc.
-                        log.exception(
-                            "Work item failed",
-                            daemon=daemon_name,
-                            item=_safe_item_summary(item),
-                        )
-
             sleep(poll_interval_seconds)
         except Exception:
             log.exception(
