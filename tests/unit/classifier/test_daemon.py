@@ -13,7 +13,6 @@ from tests.helpers.mocks import make_mock_paperless
 def _settings(**overrides):
     return make_settings_obj(**overrides)
 
-
 def _doc(id, tags=None):
     """Shorthand for a document dict."""
     return make_document(id=id, tags=tags or [])
@@ -23,27 +22,22 @@ class TestMainConfigError:
 
     @patch("classifier.daemon.bootstrap_daemon", return_value=None)
     def test_returns_on_config_error(self, mock_bootstrap):
-        # Act
         result = main()
 
-        # Assert
         assert result is None
         mock_bootstrap.assert_called_once()
 
     @patch("classifier.daemon.bootstrap_daemon", return_value=None)
     @patch("classifier.daemon.run_polling_threadpool")
     def test_does_not_start_loop_on_config_error(self, mock_loop, mock_bootstrap):
-        # Act
         main()
 
-        # Assert
         mock_loop.assert_not_called()
 
 class TestIterDocsToClassifyValid:
     """Yields documents that pass all filter checks."""
 
     def test_yields_valid_document(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -53,15 +47,12 @@ class TestIterDocsToClassifyValid:
         doc = _doc(1, tags=[444])
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert len(result) == 1
         assert result[0]["id"] == 1
 
     def test_yields_multiple_valid_documents(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -71,59 +62,47 @@ class TestIterDocsToClassifyValid:
         docs = [_doc(1, tags=[444]), _doc(2, tags=[444]), _doc(3, tags=[444])]
         client.get_documents_by_tag.return_value = docs
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert len(result) == 3
 
 class TestIterDocsSkipsNonIntegerId:
     """Documents without an integer id are skipped."""
 
     def test_skips_none_id(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(CLASSIFY_PRE_TAG_ID=444, CLASSIFY_POST_TAG_ID=None)
         doc = {"id": None, "tags": [444]}
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert result == []
 
     def test_skips_string_id(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(CLASSIFY_PRE_TAG_ID=444, CLASSIFY_POST_TAG_ID=None)
         doc = {"id": "abc", "tags": [444]}
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert result == []
 
     def test_skips_missing_id(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(CLASSIFY_PRE_TAG_ID=444, CLASSIFY_POST_TAG_ID=None)
         doc = {"tags": [444]}
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert result == []
 
 class TestIterDocsSkipsAlreadyClassified:
     """Documents with the post tag are skipped and stale pre-tag removed."""
 
     def test_skips_doc_with_post_tag(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -133,15 +112,12 @@ class TestIterDocsSkipsAlreadyClassified:
         doc = _doc(1, tags=[444, 555])
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert result == []
 
     @patch("common.document_iter.remove_stale_queue_tag")
     def test_removes_stale_pre_tag(self, mock_remove):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -151,10 +127,8 @@ class TestIterDocsSkipsAlreadyClassified:
         doc = _doc(1, tags=[444, 555])
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         mock_remove.assert_called_once_with(
             client,
             1,
@@ -165,7 +139,6 @@ class TestIterDocsSkipsAlreadyClassified:
 
     def test_skips_post_tag_without_pre_tag_in_tag_set(self):
         """Document has post tag but not pre tag — still skipped."""
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -177,17 +150,14 @@ class TestIterDocsSkipsAlreadyClassified:
         doc = _doc(1, tags=[444, 555])
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert result == []
 
 class TestIterDocsSkipsAlreadyClaimed:
     """Documents already claimed (processing tag present) are skipped."""
 
     def test_skips_doc_with_processing_tag(self):
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -197,15 +167,12 @@ class TestIterDocsSkipsAlreadyClaimed:
         doc = _doc(1, tags=[444, 666])
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert result == []
 
     def test_not_skipped_when_processing_tag_not_configured(self):
         """No processing tag configured means no skip."""
-        # Arrange
         client = make_mock_paperless()
         settings = _settings(
             CLASSIFY_PRE_TAG_ID=444,
@@ -215,10 +182,8 @@ class TestIterDocsSkipsAlreadyClaimed:
         doc = _doc(1, tags=[444])
         client.get_documents_by_tag.return_value = [doc]
 
-        # Act
         result = list(_iter_docs_to_classify(client, settings))
 
-        # Assert
         assert len(result) == 1
 
 class TestProcessDocumentClosure:
@@ -237,7 +202,6 @@ class TestProcessDocumentClosure:
         mock_loop,
         mock_bootstrap,
     ):
-        # Arrange
         settings = _settings()
         list_client = make_mock_paperless()
         mock_bootstrap.return_value = (settings, list_client)
@@ -257,10 +221,8 @@ class TestProcessDocumentClosure:
         # PaperlessClient is called for taxonomy_client and then per-doc
         mock_client_cls.side_effect = [MagicMock(), mock_paperless_instance]
 
-        # Act
         main()
 
-        # Assert — we got the process_item closure
         assert captured_process is not None
 
         # Now invoke it to test the closure
@@ -274,7 +236,6 @@ class TestProcessDocumentClosure:
             doc = _doc(1, tags=[444])
             captured_process(doc)
 
-            # Assert — client was created and closed
             mock_client_cls.assert_called_once()
             mock_paperless_instance.close.assert_called_once()
             mock_proc_instance.process.assert_called_once()
@@ -293,7 +254,6 @@ class TestTaxonomyRefreshAsBatchHook:
         mock_loop,
         mock_bootstrap,
     ):
-        # Arrange
         settings = _settings()
         list_client = make_mock_paperless()
         mock_bootstrap.return_value = (settings, list_client)
@@ -311,10 +271,8 @@ class TestTaxonomyRefreshAsBatchHook:
 
         mock_client_cls.return_value = MagicMock()
 
-        # Act
         main()
 
-        # Assert
         assert captured_before_batch is not None
         # Call the hook — it should invoke taxonomy_cache.refresh()
         captured_before_batch([_doc(1)])
@@ -334,17 +292,14 @@ class TestMainCleanup:
         mock_loop,
         mock_bootstrap,
     ):
-        # Arrange
         settings = _settings()
         list_client = make_mock_paperless()
         mock_bootstrap.return_value = (settings, list_client)
         taxonomy_client = MagicMock()
         mock_client_cls.return_value = taxonomy_client
 
-        # Act
         with pytest.raises(KeyboardInterrupt):
             main()
 
-        # Assert
         list_client.close.assert_called_once()
         taxonomy_client.close.assert_called_once()
