@@ -202,7 +202,7 @@ class ClassificationProcessor:
         """Move the document back to the OCR queue (content was empty)."""
         updated = clean_pipeline_tags(tags, self.settings)
         updated.add(self.settings.PRE_TAG_ID)
-        self.paperless_client.update_document_metadata(self.doc_id, tags=list(updated))
+        self.paperless_client.update_document_metadata(self.doc_id, tags=updated)
         log.info("Requeued document for OCR", doc_id=self.doc_id)
 
     def _finalize_with_error(self, tags: set[int]) -> None:

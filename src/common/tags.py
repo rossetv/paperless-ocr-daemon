@@ -129,10 +129,18 @@ def finalize_document_with_error(
     if settings.ERROR_TAG_ID:
         updated.add(settings.ERROR_TAG_ID)
 
-    if content is not None:
-        client.update_document(doc_id, content, updated)
-    else:
-        client.update_document_metadata(doc_id, tags=updated)
+    try:
+        if content is not None:
+            client.update_document(doc_id, content, updated)
+        else:
+            client.update_document_metadata(doc_id, tags=updated)
+    except PAPERLESS_CALL_EXCEPTIONS:
+        log.exception(
+            "Failed to finalize document with error tag",
+            doc_id=doc_id,
+            error_tag_id=settings.ERROR_TAG_ID,
+        )
+        return
 
     if settings.ERROR_TAG_ID:
         log.warning(

@@ -243,7 +243,7 @@
         {
           "file": "src/common/paperless.py",
           "importers": 7,
-          "excerpt": "\"\"\"Paperless-ngx REST API client with automatic retries.\"\"\"\n\nfrom __future__ import annotations\n\nfrom typing import Any, Generator, Iterable, TypedDict\n\nimport httpx\nimport structlog\n\nfrom .config import Settings\nfrom .retry import retry\n\nlog = structlog.get_logger(__name__)\n\n# Exceptions that should trigger a retry: transient network errors and\n# 5xx-induced HTTPStatusError (raised by _raise_for_status_if_server_error).\nRETRYABLE_HTTP_EXCEPTIONS = (httpx.RequestError, httpx.HTTPStatusError)\n\n# Exceptions that callers should catch when wrapping PaperlessClient calls\n# in non-fatal error handling.  Covers network errors, HTTP errors, and\n# unexpected response shapes.\nPAPERLESS_CALL_EXCEPTIONS = (OSError, httpx.HTTPError, ValueError, KeyError)\n\n\nclass DocumentMetadataUpdate(TypedDict, total=False):\n    \"\"\"Keyword arguments accepted by :meth:`PaperlessClient.update_document_metadata`.\"\"\"\n\n    title: str\n    correspondent_id: int\n    document_type_id: int\n\n... (222 more lines)"
+          "excerpt": "\"\"\"Paperless-ngx REST API client with automatic retries.\"\"\"\n\nfrom __future__ import annotations\n\nimport types\nfrom typing import Any, Generator, Iterable, TypedDict\n\nimport httpx\nimport structlog\n\nfrom .config import Settings\nfrom .retry import retry\n\nlog = structlog.get_logger(__name__)\n\n# Exceptions that should trigger a retry: transient network errors and\n# 5xx-induced HTTPStatusError (raised by _raise_for_status_if_server_error).\nRETRYABLE_HTTP_EXCEPTIONS = (httpx.RequestError, httpx.HTTPStatusError)\n\n# Exceptions that callers should catch when wrapping PaperlessClient calls\n# in non-fatal error handling.  Covers network errors, HTTP errors, and\n# unexpected response shapes.\nPAPERLESS_CALL_EXCEPTIONS = (OSError, httpx.HTTPError, ValueError, KeyError)\n\n\nclass DocumentMetadataUpdate(TypedDict, total=False):\n    \"\"\"Keyword arguments accepted by :meth:`PaperlessClient.update_document_metadata`.\"\"\"\n\n    title: str\n    correspondent_id: int\n\n... (223 more lines)"
         },
         {
           "file": "tests/helpers/mocks.py",
@@ -572,7 +572,7 @@
       "total_files": 85,
       "critical_untested": [
         {
-          "file": "src/classifier/provider.py",
+          "file": "src/ocr/provider.py",
           "importers": 3
         }
       ]
@@ -626,7 +626,7 @@
             "tags.py",
             "utils.py"
           ],
-          "total_loc": 1539,
+          "total_loc": 1540,
           "avg_fan_in": 1.6,
           "avg_fan_out": 1.6,
           "zones": {
@@ -813,7 +813,7 @@
     },
     "codebase_stats": {
       "total_files": 85,
-      "total_loc": 13285
+      "total_loc": 13286
     },
     "migration_signals": {
       "pattern_pairs": [
@@ -1469,14 +1469,6 @@
       "src/ocr/__init__.py": [
         "facade: Re-export facade (16 LOC): imports from __future__, image_converter, provider, +"
       ],
-      "src/classifier/daemon.py": [
-        "test_coverage: Untested module (92 LOC, 0 importers)",
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `orphaned::src/classifier/daemon.py` (last"
-      ],
-      "src/classifier/worker.py": [
-        "test_coverage: Untested module (316 LOC, 2 importers)",
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `structural::src/classifier/worker.py` (la"
-      ],
       "tests/integration/test_ocr_pipeline.py": [
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
@@ -1853,28 +1845,11 @@
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling "
       ],
-      "src/ocr/worker.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `smells::src/ocr/worker.py::swallowed_erro"
-      ],
-      "src/common/preflight.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `test_coverage::src/common/preflight.py::o"
-      ],
-      "src/common/bootstrap.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `test_coverage::src/common/bootstrap.py::o",
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `orphaned::src/common/bootstrap.py` (last "
-      ],
-      "src/common/daemon_loop.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `smells::src/common/daemon_loop.py::broad_",
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `orphaned::src/common/daemon_loop.py` (las"
-      ],
-      "src/classifier/provider.py": [
-        "test_coverage: Untested module (218 LOC, 3 importers)"
+      "src/ocr/provider.py": [
+        "test_coverage: No direct tests (127 LOC, 3 importers) \u2014 covered only via imports from tested mo"
       ],
       "src/ocr/daemon.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `orphaned::src/ocr/daemon.py` (last review"
-      ],
-      "src/common/claims.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `orphaned::src/common/claims.py` (last rev"
+        "test_coverage: Untested module (76 LOC, 0 importers)"
       ],
       "tests/unit/common/test_bootstrap.py": [
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
@@ -1883,9 +1858,6 @@
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling "
-      ],
-      "src/common/document_iter.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `structural::src/common/document_iter.py` "
       ],
       "tests/unit/classifier/test_quality_gates.py": [
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
@@ -1970,14 +1942,11 @@
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling ",
         "security: [B101] Use of assert detected. The enclosed code will be removed when compiling "
-      ],
-      "src/common/paperless.py": [
-        "stale_wontfix: Stale wontfix (scan_decay): re-triage `smells::src/common/paperless.py::mutable_"
       ]
     },
     "codebase_stats": {
       "total_files": 85,
-      "total_loc": 13285,
+      "total_loc": 13286,
       "avg_file_loc": 156
     },
     "sibling_conventions": {
@@ -2132,7 +2101,7 @@
         "mid_level_elegance"
       ],
       "files_to_read": [
-        "src/classifier/provider.py"
+        "src/ocr/provider.py"
       ],
       "why": "critical untested paths, API inconsistency"
     },
@@ -2229,6 +2198,7 @@
         "src/common/daemon_loop.py",
         "src/classifier/provider.py",
         "src/common/tags.py",
+        "src/ocr/provider.py",
         "src/common/bootstrap.py",
         "src/common/claims.py",
         "tests/unit/common/test_claims.py",

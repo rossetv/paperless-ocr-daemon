@@ -62,11 +62,10 @@ def _make_doc_with_content(content: str, tags=None) -> dict:
     return make_document(content=content, tags=tags or [443])
 
 class TestProcessHappyPath:
-    """Full classification flow with metadata application."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_happy_path_applies_metadata(self, mock_release, mock_claim):
+    def test_applies_metadata(self, mock_release, mock_claim):
         doc = _make_doc_with_content("Invoice from Acme Corp. Total: $100.")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
@@ -79,7 +78,7 @@ class TestProcessHappyPath:
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_happy_path_resolves_correspondent(self, mock_release, mock_claim):
+    def test_resolves_correspondent(self, mock_release, mock_claim):
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
@@ -90,7 +89,7 @@ class TestProcessHappyPath:
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_happy_path_resolves_document_type(self, mock_release, mock_claim):
+    def test_resolves_document_type(self, mock_release, mock_claim):
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
@@ -101,7 +100,7 @@ class TestProcessHappyPath:
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_happy_path_resolves_tags(self, mock_release, mock_claim):
+    def test_resolves_tags(self, mock_release, mock_claim):
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
@@ -110,12 +109,56 @@ class TestProcessHappyPath:
 
         proc.taxonomy_cache.get_or_create_tag_ids.assert_called_once()
 
-class TestProcessClaimFailure:
-    """Claim failure causes early exit without classification."""
+    @patch("classifier.worker.claim_processing_tag", return_value=True)
+    @patch("classifier.worker.release_processing_tag")
+    def test_skips_correspondent_resolution_when_empty(self, mock_release, mock_claim):
+        result = make_classification_result(correspondent="")
+        doc = _make_doc_with_content("text")
+        proc = _make_processor(doc=doc)
+        proc.paperless_client.get_document.return_value = doc
+        proc.classifier.classify_text.return_value = (result, "model")
+
+        proc.process()
+
+        proc.taxonomy_cache.get_or_create_correspondent_id.assert_not_called()
+
+    @patch("classifier.worker.claim_processing_tag", return_value=True)
+    @patch("classifier.worker.release_processing_tag")
+    @patch("classifier.worker.normalize_language", return_value="en")
+    def test_normalizes_language(self, mock_norm, mock_release, mock_claim):
+        doc = _make_doc_with_content("text")
+        proc = _make_processor(doc=doc)
+        proc.paperless_client.get_document.return_value = doc
+
+        proc.process()
+
+        mock_norm.assert_called_once()
+        update_call = proc.paperless_client.update_document_metadata.call_args
+        assert update_call.kwargs.get("language") == "en"
+
+    @patch("classifier.worker.claim_processing_tag", return_value=True)
+    @patch("classifier.worker.release_processing_tag")
+    def test_includes_post_tag(self, mock_release, mock_claim):
+        doc = _make_doc_with_content("text")
+        proc = _make_processor(
+            doc=doc,
+            settings_overrides={"CLASSIFY_POST_TAG_ID": 555},
+        )
+        proc.paperless_client.get_document.return_value = doc
+
+        proc.process()
+
+        update_call = proc.paperless_client.update_document_metadata.call_args
+        final_tags = update_call.kwargs.get("tags") or update_call[1].get("tags")
+        assert 555 in final_tags
+
+
+class TestProcessEarlyExits:
+    """Conditions that cause process() to exit before LLM classification."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=False)
     @patch("classifier.worker.release_processing_tag")
-    def test_claim_failure_exits_without_classifying(self, mock_release, mock_claim):
+    def test_claim_failure_skips_classification(self, mock_release, mock_claim):
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
@@ -133,11 +176,7 @@ class TestProcessClaimFailure:
 
         proc.process()
 
-        # Assert — release not called because claimed=False
         mock_release.assert_not_called()
-
-class TestProcessErrorTagPresent:
-    """Skip classification when the document already has an error tag."""
 
     @patch("classifier.worker.release_processing_tag")
     def test_skips_when_error_tag_present(self, mock_release):
@@ -149,9 +188,6 @@ class TestProcessErrorTagPresent:
 
         proc.classifier.classify_text.assert_not_called()
 
-class TestProcessEmptyContent:
-    """Empty OCR content requeues the document."""
-
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
     def test_empty_content_requeues(self, mock_release, mock_claim):
@@ -161,7 +197,6 @@ class TestProcessEmptyContent:
 
         proc.process()
 
-        # Assert — classify_text not called, requeue happened (PRE_TAG_ID in tags)
         proc.classifier.classify_text.assert_not_called()
         proc.paperless_client.update_document_metadata.assert_called()
         tags = proc.paperless_client.update_document_metadata.call_args.kwargs.get("tags")
@@ -178,9 +213,6 @@ class TestProcessEmptyContent:
 
         proc.classifier.classify_text.assert_not_called()
 
-class TestProcessRefusalContent:
-    """Content containing refusal markers triggers error finalization."""
-
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
     @patch("classifier.worker.needs_error_tag", return_value=True)
@@ -193,8 +225,9 @@ class TestProcessRefusalContent:
 
         proc.paperless_client.update_document_metadata.assert_called()
 
-class TestProcessEmptyClassificationResult:
-    """Empty classification result triggers error tag."""
+
+class TestProcessErrorPaths:
+    """Error finalization triggered by empty/generic classification results."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -208,7 +241,7 @@ class TestProcessEmptyClassificationResult:
 
         proc.paperless_client.update_document_metadata.assert_called()
         tags = proc.paperless_client.update_document_metadata.call_args.kwargs.get("tags")
-        assert 552 in tags  # ERROR_TAG_ID — finalize_with_error was called
+        assert 552 in tags  # ERROR_TAG_ID
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -224,17 +257,13 @@ class TestProcessEmptyClassificationResult:
 
         proc.process()
 
-        # Assert — error tag applied (finalize_with_error, not success path)
         proc.paperless_client.update_document_metadata.assert_called()
         tags = proc.paperless_client.update_document_metadata.call_args.kwargs.get("tags")
         assert 552 in tags  # ERROR_TAG_ID
 
-class TestProcessGenericDocumentType:
-    """Generic document type triggers error tag."""
-
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_generic_type_document_finalizes_with_error(self, mock_release, mock_claim):
+    def test_generic_type_document_rejected(self, mock_release, mock_claim):
         result = make_classification_result(document_type="Document")
         doc = _make_doc_with_content("valid content")
         proc = _make_processor(doc=doc)
@@ -247,7 +276,7 @@ class TestProcessGenericDocumentType:
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_generic_type_other_finalizes_with_error(self, mock_release, mock_claim):
+    def test_generic_type_other_rejected(self, mock_release, mock_claim):
         result = make_classification_result(document_type="Other")
         doc = _make_doc_with_content("valid content")
         proc = _make_processor(doc=doc)
@@ -258,24 +287,43 @@ class TestProcessGenericDocumentType:
 
         proc.taxonomy_cache.get_or_create_document_type_id.assert_not_called()
 
-class TestProcessLLMFailure:
-    """LLM failure (exception during classify) still releases the lock."""
+    @patch("classifier.worker.claim_processing_tag", return_value=True)
+    @patch("classifier.worker.release_processing_tag")
+    def test_generic_type_unknown_rejected(self, mock_release, mock_claim):
+        result = make_classification_result(document_type="Unknown")
+        doc = _make_doc_with_content("text")
+        proc = _make_processor(doc=doc)
+        proc.paperless_client.get_document.return_value = doc
+        proc.classifier.classify_text.return_value = (result, "model")
+
+        proc.process()
+
+        proc.taxonomy_cache.get_or_create_document_type_id.assert_not_called()
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
-    def test_exception_during_classify_releases_lock(self, mock_release, mock_claim):
-        doc = _make_doc_with_content("valid content")
-        proc = _make_processor(doc=doc)
+    def test_finalize_without_error_tag_still_updates(self, mock_release, mock_claim):
+        doc = _make_doc_with_content("text")
+        result = make_classification_result(
+            title="", correspondent="", tags=[], document_date="",
+            document_type="", language="", person="",
+        )
+        proc = _make_processor(
+            doc=doc,
+            settings_overrides={"ERROR_TAG_ID": None},
+        )
         proc.paperless_client.get_document.return_value = doc
-        proc.classifier.classify_text.side_effect = RuntimeError("LLM exploded")
+        proc.classifier.classify_text.return_value = (result, "model-a")
 
-        with pytest.raises(RuntimeError, match="LLM exploded"):
-            proc.process()
+        proc.process()
 
-        mock_release.assert_called_once()
+        update_call = proc.paperless_client.update_document_metadata.call_args
+        final_tags = update_call.kwargs.get("tags") or update_call[1].get("tags")
+        assert 552 not in final_tags
 
-class TestProcessFinallyReleasesLock:
-    """The finally block always releases the processing lock when claimed."""
+
+class TestProcessLockRelease:
+    """The finally block releases the processing lock when claimed."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -300,8 +348,21 @@ class TestProcessFinallyReleasesLock:
 
         mock_release.assert_called_once()
 
-class TestTruncationByPages:
-    """Page-based truncation is applied when CLASSIFY_MAX_PAGES > 0."""
+    @patch("classifier.worker.claim_processing_tag", return_value=True)
+    @patch("classifier.worker.release_processing_tag")
+    def test_lock_released_on_llm_exception(self, mock_release, mock_claim):
+        doc = _make_doc_with_content("valid content")
+        proc = _make_processor(doc=doc)
+        proc.paperless_client.get_document.return_value = doc
+        proc.classifier.classify_text.side_effect = RuntimeError("LLM exploded")
+
+        with pytest.raises(RuntimeError, match="LLM exploded"):
+            proc.process()
+
+        mock_release.assert_called_once()
+
+
+class TestContentTruncation:
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -316,9 +377,6 @@ class TestTruncationByPages:
 
         mock_trunc.assert_called_once()
 
-class TestTruncationByChars:
-    """Character-based truncation is applied as a hard cap."""
-
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
     def test_char_truncation_applied(self, mock_release, mock_claim):
@@ -332,13 +390,31 @@ class TestTruncationByChars:
 
         proc.process()
 
-        # Assert — classify_text was called with truncated content
         call_args = proc.classifier.classify_text.call_args
         text_arg = call_args[0][0]
         assert len(text_arg) < len(long_content)
 
+    @patch("classifier.worker.truncate_content_by_pages")
+    @patch("classifier.worker.claim_processing_tag", return_value=True)
+    @patch("classifier.worker.release_processing_tag")
+    def test_page_truncation_note_passed_to_provider(self, mock_release, mock_claim, mock_trunc):
+        doc = _make_doc_with_content("long text with pages")
+        proc = _make_processor(
+            doc=doc,
+            settings_overrides={"CLASSIFY_MAX_PAGES": 2},
+        )
+        proc.paperless_client.get_document.return_value = doc
+        mock_trunc.return_value = ("truncated", "NOTE: Pages 1-2 of 10.")
+
+        proc.process()
+
+        assert mock_trunc.called
+        classify_call = proc.classifier.classify_text.call_args
+        assert classify_call is not None, "classify_text was never called"
+        assert classify_call.kwargs.get("truncation_note") == "NOTE: Pages 1-2 of 10."
+
+
 class TestTagEnrichment:
-    """Tags are enriched with year, country, model tags."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -353,8 +429,8 @@ class TestTagEnrichment:
 
         mock_enrich.assert_called_once()
 
+
 class TestCustomFieldPerson:
-    """Person custom field applied when CLASSIFY_PERSON_FIELD_ID is set."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -410,8 +486,8 @@ class TestCustomFieldPerson:
         update_call = proc.paperless_client.update_document_metadata.call_args
         assert update_call.kwargs.get("custom_fields") is None
 
+
 class TestStatsLogging:
-    """Stats are logged after classification."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
@@ -427,139 +503,14 @@ class TestStatsLogging:
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")
     def test_stats_not_logged_when_no_attempts(self, mock_release, mock_claim):
-        """Stats with zero attempts are not logged."""
         doc = _make_doc_with_content("text")
         proc = _make_processor(doc=doc)
         proc.paperless_client.get_document.return_value = doc
         proc.classifier.get_stats.return_value = {"attempts": 0}
 
-        # Act — process will still run, stats just won't be logged
         proc.process()
 
-        # Assert — get_stats is called but the empty stats won't cause errors
         proc.classifier.get_stats.assert_called()
-
-class TestNoCorrespondentWhenEmpty:
-    """Empty correspondent skips taxonomy resolution."""
-
-    @patch("classifier.worker.claim_processing_tag", return_value=True)
-    @patch("classifier.worker.release_processing_tag")
-    def test_no_correspondent_resolution_when_empty(self, mock_release, mock_claim):
-        result = make_classification_result(correspondent="")
-        doc = _make_doc_with_content("text")
-        proc = _make_processor(doc=doc)
-        proc.paperless_client.get_document.return_value = doc
-        proc.classifier.classify_text.return_value = (result, "model")
-
-        proc.process()
-
-        proc.taxonomy_cache.get_or_create_correspondent_id.assert_not_called()
-
-class TestNoDocumentTypeWhenGeneric:
-    """Generic document type is rejected before taxonomy resolution."""
-
-    @patch("classifier.worker.claim_processing_tag", return_value=True)
-    @patch("classifier.worker.release_processing_tag")
-    def test_generic_type_rejected(self, mock_release, mock_claim):
-        result = make_classification_result(document_type="Unknown")
-        doc = _make_doc_with_content("text")
-        proc = _make_processor(doc=doc)
-        proc.paperless_client.get_document.return_value = doc
-        proc.classifier.classify_text.return_value = (result, "model")
-
-        proc.process()
-
-        proc.taxonomy_cache.get_or_create_document_type_id.assert_not_called()
-
-class TestLanguageNormalization:
-    """Language field is normalized before being sent to Paperless."""
-
-    @patch("classifier.worker.claim_processing_tag", return_value=True)
-    @patch("classifier.worker.release_processing_tag")
-    @patch("classifier.worker.normalize_language", return_value="en")
-    def test_language_normalized(self, mock_norm, mock_release, mock_claim):
-        doc = _make_doc_with_content("text")
-        proc = _make_processor(doc=doc)
-        proc.paperless_client.get_document.return_value = doc
-
-        proc.process()
-
-        mock_norm.assert_called_once()
-        update_call = proc.paperless_client.update_document_metadata.call_args
-        assert update_call.kwargs.get("language") == "en"
-
-class TestClassifyPostTag:
-    """When CLASSIFY_POST_TAG_ID is set, it appears in the final tag set."""
-
-    @patch("classifier.worker.claim_processing_tag", return_value=True)
-    @patch("classifier.worker.release_processing_tag")
-    def test_post_tag_included(self, mock_release, mock_claim):
-        doc = _make_doc_with_content("text")
-        proc = _make_processor(
-            doc=doc,
-            settings_overrides={"CLASSIFY_POST_TAG_ID": 555},
-        )
-        proc.paperless_client.get_document.return_value = doc
-
-        proc.process()
-
-        update_call = proc.paperless_client.update_document_metadata.call_args
-        final_tags = update_call.kwargs.get("tags") or update_call[1].get("tags")
-        assert 555 in final_tags
-
-class TestFinalizeWithErrorNoTag:
-    """When ERROR_TAG_ID is None, pipeline tags are cleaned but no error tag added."""
-
-    @patch("classifier.worker.claim_processing_tag", return_value=True)
-    @patch("classifier.worker.release_processing_tag")
-    def test_finalize_without_error_tag_still_updates(self, mock_release, mock_claim):
-        # Arrange — empty result triggers _finalize_with_error
-        doc = _make_doc_with_content("text")
-        result = make_classification_result(
-            title="", correspondent="", tags=[], document_date="",
-            document_type="", language="", person="",
-        )
-        proc = _make_processor(
-            doc=doc,
-            settings_overrides={"ERROR_TAG_ID": None},
-        )
-        proc.paperless_client.get_document.return_value = doc
-        proc.classifier.classify_text.return_value = (result, "model-a")
-
-        proc.process()
-
-        # Assert — update_document_metadata called, but ERROR_TAG_ID not in tags
-        update_call = proc.paperless_client.update_document_metadata.call_args
-        final_tags = update_call.kwargs.get("tags") or update_call[1].get("tags")
-        assert 552 not in final_tags  # 552 is the default error tag, shouldn't be there
-
-class TestTruncationWithNote:
-    """Page truncation note is included when truncation occurs."""
-
-    @patch("classifier.worker.truncate_content_by_pages")
-    @patch("classifier.worker.claim_processing_tag", return_value=True)
-    @patch("classifier.worker.release_processing_tag")
-    def test_page_truncation_note_passed_to_provider(self, mock_release, mock_claim, mock_trunc):
-        # Arrange — truncation returns different content and a note
-        doc = _make_doc_with_content("long text with pages")
-        proc = _make_processor(
-            doc=doc,
-            settings_overrides={"CLASSIFY_MAX_PAGES": 2},
-        )
-        proc.paperless_client.get_document.return_value = doc
-        mock_trunc.return_value = ("truncated", "NOTE: Pages 1-2 of 10.")
-
-        proc.process()
-
-        # Assert — the classify_text call includes the truncation note
-        assert mock_trunc.called
-        classify_call = proc.classifier.classify_text.call_args
-        assert classify_call is not None, "classify_text was never called"
-        # Source always passes truncation_note as keyword argument
-        assert classify_call.kwargs.get("truncation_note") == "NOTE: Pages 1-2 of 10."
-
-class TestStatsLoggingEdgeCases:
-    """Stats logging handles empty stats and zero attempts."""
 
     @patch("classifier.worker.claim_processing_tag", return_value=True)
     @patch("classifier.worker.release_processing_tag")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import types
 from typing import Any, Generator, Iterable, TypedDict
 
 import httpx
@@ -161,7 +162,7 @@ class PaperlessClient:
         log.info("Successfully updated document", doc_id=doc_id)
 
     # Maps DocumentMetadataUpdate keys to Paperless API field names.
-    _METADATA_FIELDS: dict[str, str] = {
+    _METADATA_FIELDS = types.MappingProxyType({
         "title": "title",
         "correspondent_id": "correspondent",
         "document_type_id": "document_type",
@@ -169,7 +170,7 @@ class PaperlessClient:
         "tags": "tags",
         "language": "language",
         "custom_fields": "custom_fields",
-    }
+    })
 
     def update_document_metadata(
         self,
@@ -183,7 +184,10 @@ class PaperlessClient:
         """
         payload = {}
         for key, value in fields.items():
-            if value is None or key not in self._METADATA_FIELDS:
+            if value is None:
+                continue
+            if key not in self._METADATA_FIELDS:
+                log.warning("Ignoring unknown metadata key", key=key, doc_id=doc_id)
                 continue
             if key == "tags":
                 value = list(value)
