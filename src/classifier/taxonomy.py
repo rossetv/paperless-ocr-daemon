@@ -14,7 +14,7 @@ from .tag_filters import dedupe_tags
 log = structlog.get_logger(__name__)
 
 
-def _index_items(items: list[dict], normalizer) -> dict[str, dict]:
+def _index_items(items: list[dict], normalizer: Callable[[str], str]) -> dict[str, dict]:
     """
     Build a ``{normalized_name: item_dict}`` lookup from a Paperless listing.
 
@@ -33,7 +33,7 @@ def _index_items(items: list[dict], normalizer) -> dict[str, dict]:
 def _match_item(
     name: str,
     mapping: dict[str, dict],
-    normalizer,
+    normalizer: Callable[[str], str],
     allow_substring: bool,
 ) -> dict | None:
     """
@@ -67,7 +67,7 @@ def _get_usage_count(item: dict) -> int:
     for key in ("document_count", "documents_count", "documents"):
         if key not in item:
             continue
-        value = item.get(key)
+        value = item[key]
         if isinstance(value, int):
             return value
         if isinstance(value, str) and value.isdigit():
@@ -176,6 +176,12 @@ class TaxonomyCache:
             False, self._client.create_document_type, "document type",
         )
 
+    @staticmethod
+    def _extract_id(item: dict) -> int | None:
+        """Extract and validate the ``id`` field from a Paperless API item."""
+        value = item.get("id")
+        return value if isinstance(value, int) else None
+
     def _get_or_create_item_id(
         self, name: str, kind_factory: Callable[[], _TaxonomyKind],
     ) -> int | None:
@@ -186,7 +192,7 @@ class TaxonomyCache:
             kind = kind_factory()
             matched = _match_item(name, kind.mapping, kind.normalizer, kind.allow_substring)
             if matched:
-                return matched.get("id")
+                return self._extract_id(matched)
             try:
                 created = kind.creator(name.strip())
             except PAPERLESS_CALL_EXCEPTIONS:
@@ -195,17 +201,21 @@ class TaxonomyCache:
                     item_label=kind.label,
                     name=name,
                 )
-                self.refresh()
+                try:
+                    self.refresh()
+                except PAPERLESS_CALL_EXCEPTIONS:
+                    log.warning("Cache refresh also failed", item_label=kind.label)
+                    raise
                 kind = kind_factory()
                 matched = _match_item(
                     name, kind.mapping, kind.normalizer, kind.allow_substring,
                 )
                 if matched:
-                    return matched.get("id")
+                    return self._extract_id(matched)
                 raise
             kind.items.append(created)
             kind.mapping[kind.normalizer(created.get("name", name))] = created
-            return created.get("id")
+            return self._extract_id(created)
 
     def get_or_create_correspondent_id(self, name: str) -> int | None:
         return self._get_or_create_item_id(name, self._correspondent_kind)
@@ -226,7 +236,9 @@ class TaxonomyCache:
             with self._lock:
                 matched = _match_item(tag, self._tag_map, normalize_simple, False)
                 if matched:
-                    ids.append(matched.get("id"))
+                    tag_id = self._extract_id(matched)
+                    if tag_id is not None:
+                        ids.append(tag_id)
                     continue
                 try:
                     created = self._client.create_tag(
@@ -238,13 +250,17 @@ class TaxonomyCache:
                     matching_algorithm = self._infer_matching_algorithm()
                     matched = _match_item(tag, self._tag_map, normalize_simple, False)
                     if matched:
-                        ids.append(matched.get("id"))
+                        tag_id = self._extract_id(matched)
+                        if tag_id is not None:
+                            ids.append(tag_id)
                         continue
                     raise
                 self._tags.append(created)
                 self._tag_map[normalize_simple(created.get("name", tag))] = created
-                ids.append(created.get("id"))
-        return [tag_id for tag_id in ids if tag_id is not None]
+                tag_id = self._extract_id(created)
+                if tag_id is not None:
+                    ids.append(tag_id)
+        return ids
 
     def _infer_matching_algorithm(self) -> int | str:
         """

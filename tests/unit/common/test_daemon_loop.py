@@ -106,7 +106,7 @@ class TestRunPollingThreadpool:
         mock_sleep.assert_called_with(10)
 
     def test_handles_fetch_work_exception_gracefully(self):
-        fetch_work = MagicMock(side_effect=RuntimeError("fetch failed"))
+        fetch_work = MagicMock(side_effect=OSError("fetch failed"))
         process_item = MagicMock()
         mock_sleep = _make_sleep_noop()
 

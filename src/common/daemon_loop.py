@@ -13,9 +13,9 @@ from .shutdown import is_shutdown_requested
 
 log = structlog.get_logger(__name__)
 
-# Daemon-level fault isolation: catch everything in PAPERLESS_CALL_EXCEPTIONS
-# plus RuntimeError (e.g. uninitialised client) and TypeError (unexpected data).
-_DAEMON_LOOP_EXCEPTIONS = PAPERLESS_CALL_EXCEPTIONS + (RuntimeError, TypeError)
+# Daemon-level fault isolation: catch transient network/API errors so the
+# polling loop survives temporary outages without crashing.
+_DAEMON_LOOP_EXCEPTIONS = PAPERLESS_CALL_EXCEPTIONS
 
 T = TypeVar("T")
 
@@ -117,8 +117,7 @@ def run_polling_threadpool(
             )
             sleep(poll_interval_seconds)
 
-    if is_shutdown_requested():
-        log.info("Shutdown requested; exiting gracefully", daemon=daemon_name)
+    log.info("Shutdown requested; exiting gracefully", daemon=daemon_name)
 
 
 def _safe_item_summary(item: object) -> str:

@@ -95,7 +95,7 @@ class ClassificationProcessor:
                 return
 
             claimed = claim_processing_tag(
-                paperless_client=self.paperless_client,
+                client=self.paperless_client,
                 doc_id=self.doc_id,
                 tag_id=self.settings.CLASSIFY_PROCESSING_TAG_ID,
                 purpose="classification",
@@ -205,7 +205,8 @@ class ClassificationProcessor:
         try:
             self.paperless_client.update_document_metadata(self.doc_id, tags=updated)
         except PAPERLESS_CALL_EXCEPTIONS:
-            log.exception("Failed to requeue document for OCR", doc_id=self.doc_id)
+            log.exception("Failed to requeue document for OCR; marking error", doc_id=self.doc_id)
+            self._finalize_with_error(tags)
             return
         log.info("Requeued document for OCR", doc_id=self.doc_id)
 

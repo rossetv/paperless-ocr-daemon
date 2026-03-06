@@ -52,8 +52,8 @@ def main() -> None:
     :class:`TaxonomyCache`, then enters the polling loop.
     """
     result = bootstrap_daemon(
-        processing_tag_id=lambda s: s.CLASSIFY_PROCESSING_TAG_ID,
-        pre_tag_id=lambda s: s.CLASSIFY_PRE_TAG_ID,
+        get_processing_tag_id=lambda s: s.CLASSIFY_PROCESSING_TAG_ID,
+        get_pre_tag_id=lambda s: s.CLASSIFY_PRE_TAG_ID,
     )
     if result is None:
         return

@@ -30,7 +30,7 @@ class DocumentMetadataUpdate(TypedDict, total=False):
     correspondent_id: int
     document_type_id: int
     document_date: str
-    tags: list[int]
+    tags: set[int]
     language: str
     custom_fields: list[dict]
 
@@ -177,23 +177,35 @@ class PaperlessClient:
     def update_document_metadata(
         self,
         doc_id: int,
-        **fields: Any,
+        *,
+        title: str | None = None,
+        correspondent_id: int | None = None,
+        document_type_id: int | None = None,
+        document_date: str | None = None,
+        tags: set[int] | None = None,
+        language: str | None = None,
+        custom_fields: list[dict] | None = None,
     ) -> None:
         """Update document metadata fields on Paperless.
 
-        Accepts any keys defined in :class:`DocumentMetadataUpdate`.
         ``None`` values are silently dropped.
         """
-        payload = {}
-        for key, value in fields.items():
+        _field_map: list[tuple[str, str, object]] = [
+            ("title", "title", title),
+            ("correspondent_id", "correspondent", correspondent_id),
+            ("document_type_id", "document_type", document_type_id),
+            ("document_date", "created", document_date),
+            ("tags", "tags", tags),
+            ("language", "language", language),
+            ("custom_fields", "custom_fields", custom_fields),
+        ]
+        payload: dict[str, object] = {}
+        for _key, api_field, value in _field_map:
             if value is None:
                 continue
-            if key not in self._METADATA_FIELDS:
-                log.warning("Ignoring unknown metadata key", key=key, doc_id=doc_id)
-                continue
-            if key == "tags":
-                value = list(value)
-            payload[self._METADATA_FIELDS[key]] = value
+            if _key == "tags":
+                value = list(value)  # type: ignore[arg-type]
+            payload[api_field] = value
 
         if not payload:
             log.info("No metadata updates to apply", doc_id=doc_id)

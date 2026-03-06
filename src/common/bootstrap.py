@@ -20,13 +20,16 @@ log = structlog.get_logger(__name__)
 
 def bootstrap_daemon(
     *,
-    processing_tag_id: Callable[[Settings], int | None],
-    pre_tag_id: Callable[[Settings], int],
+    get_processing_tag_id: Callable[[Settings], int | None],
+    get_pre_tag_id: Callable[[Settings], int],
 ) -> tuple[Settings, PaperlessClient] | None:
     """Run the shared daemon startup. Returns (settings, client) or None on failure.
 
-    *processing_tag_id* and *pre_tag_id* are callables that extract the
-    relevant tag IDs from the loaded settings, avoiding stringly-typed
+    Initialization order: Settings → logging → libraries (OpenAI client,
+    concurrency limiter) → signal handlers → preflight → stale-lock recovery.
+
+    *get_processing_tag_id* and *get_pre_tag_id* are callables that extract
+    the relevant tag IDs from the loaded settings, avoiding stringly-typed
     ``getattr`` lookups.
     """
     try:
@@ -39,18 +42,18 @@ def bootstrap_daemon(
         log.error("Configuration error", error=e)
         return None
 
-    list_client = PaperlessClient(settings)
+    client = PaperlessClient(settings)
     try:
-        run_preflight_checks(settings, list_client)
+        run_preflight_checks(settings, client)
     except PreflightError as e:
         log.error("Preflight check failed", error=str(e))
-        list_client.close()
+        client.close()
         return None
 
     recover_stale_locks(
-        list_client,
-        processing_tag_id=processing_tag_id(settings),
-        pre_tag_id=pre_tag_id(settings),
+        client,
+        processing_tag_id=get_processing_tag_id(settings),
+        pre_tag_id=get_pre_tag_id(settings),
     )
 
-    return settings, list_client
+    return settings, client

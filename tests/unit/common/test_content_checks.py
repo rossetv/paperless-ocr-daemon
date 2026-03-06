@@ -1,10 +1,10 @@
-"""Tests for common.utils."""
+"""Tests for common.content_checks."""
 
 from __future__ import annotations
 
 from PIL import Image
 
-from common.utils import contains_redacted_marker, is_error_content
+from common.content_checks import contains_redacted_marker, is_error_content
 from ocr.provider import is_blank
 
 class TestIsBlank:

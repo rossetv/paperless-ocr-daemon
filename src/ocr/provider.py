@@ -11,7 +11,7 @@ from PIL import Image
 
 from common.config import Settings
 from common.llm import OpenAIChatMixin, unique_models
-from common.utils import is_error_content
+from common.content_checks import is_error_content
 from .prompts import TRANSCRIPTION_PROMPT
 
 log = structlog.get_logger(__name__)

@@ -6,6 +6,7 @@ import threading
 from collections.abc import Iterable
 
 import openai
+from openai.types.chat import ChatCompletion
 
 from .concurrency import llm_limiter
 from .retry import retry
@@ -80,7 +81,7 @@ class OpenAIChatMixin:
         return self._stats.snapshot()
 
     @retry(retryable_exceptions=RETRYABLE_OPENAI_EXCEPTIONS)
-    def _create_completion(self, **kwargs):
+    def _create_completion(self, **kwargs: object) -> ChatCompletion:
         client = _openai_holder.get()
         with llm_limiter.acquire():
             return client.chat.completions.create(**kwargs)

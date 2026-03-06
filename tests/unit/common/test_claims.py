@@ -13,7 +13,7 @@ class TestClaimProcessingTag:
         client = MagicMock()
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=1, tag_id=None, purpose="test",
+            client=client, doc_id=1, tag_id=None, purpose="test",
         )
 
         assert result is True
@@ -30,7 +30,7 @@ class TestClaimProcessingTag:
         ]
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=42, tag_id=tag_id, purpose="ocr",
+            client=client, doc_id=42, tag_id=tag_id, purpose="ocr",
         )
 
         assert result is True
@@ -44,7 +44,7 @@ class TestClaimProcessingTag:
         client.get_document.side_effect = ConnectionError("unreachable")
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=1, tag_id=50, purpose="test",
+            client=client, doc_id=1, tag_id=50, purpose="test",
         )
 
         assert result is False
@@ -56,7 +56,7 @@ class TestClaimProcessingTag:
         client.get_document.return_value = {"tags": [10, 50]}  # tag already there
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=1, tag_id=tag_id, purpose="test",
+            client=client, doc_id=1, tag_id=tag_id, purpose="test",
         )
 
         assert result is False
@@ -68,7 +68,7 @@ class TestClaimProcessingTag:
         client.update_document_metadata.side_effect = ConnectionError("patch fail")
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=1, tag_id=50, purpose="test",
+            client=client, doc_id=1, tag_id=50, purpose="test",
         )
 
         assert result is False
@@ -81,7 +81,7 @@ class TestClaimProcessingTag:
         ]
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=1, tag_id=50, purpose="test",
+            client=client, doc_id=1, tag_id=50, purpose="test",
         )
 
         assert result is False
@@ -94,7 +94,7 @@ class TestClaimProcessingTag:
         ]
 
         result = claim_processing_tag(
-            paperless_client=client, doc_id=1, tag_id=50, purpose="test",
+            client=client, doc_id=1, tag_id=50, purpose="test",
         )
 
         assert result is False
@@ -109,7 +109,7 @@ class TestClaimProcessingTag:
 
         with patch("common.claims.log") as mock_log:
             result = claim_processing_tag(
-                paperless_client=client, doc_id=5, tag_id=tag_id, purpose="ocr",
+                client=client, doc_id=5, tag_id=tag_id, purpose="ocr",
             )
 
         assert result is True

@@ -6,6 +6,7 @@ import json
 
 import openai
 import structlog
+from openai.types.chat import ChatCompletion
 
 from common.config import Settings
 from common.llm import OpenAIChatMixin, unique_models
@@ -62,7 +63,7 @@ class ClassificationProvider(OpenAIChatMixin):
         ("max_tokens", "_is_max_tokens_error", "max_tokens_retries"),
     )
 
-    def _create_with_compat(self, params: dict, model: str):
+    def _create_with_compat(self, params: dict, model: str) -> ChatCompletion | None:
         """Call the chat completion API, retrying after stripping unsupported params.
 
         Ollama and some OpenAI models reject parameters they don't understand
@@ -70,18 +71,15 @@ class ClassificationProvider(OpenAIChatMixin):
         ``400 Bad Request`` whose message names the offending parameter, we
         remove it and retry the same model — up to ``len(_COMPAT_PARAMS)`` times.
         """
-        compat_retries = 0
-        while True:
+        for _ in range(len(self._COMPAT_PARAMS) + 1):
             try:
                 self._stats.inc("attempts")
                 return self._create_completion(**params)
             except openai.BadRequestError as e:
-                if compat_retries < len(self._COMPAT_PARAMS):
-                    stripped = self._try_strip_compat_param(e, params, model)
-                    if stripped is not None:
-                        params = stripped
-                        compat_retries += 1
-                        continue
+                stripped = self._try_strip_compat_param(e, params, model)
+                if stripped is not None:
+                    params = stripped
+                    continue
                 log.warning("Classification request rejected", model=model, error=e)
                 self._stats.inc("api_errors")
                 return None
@@ -89,6 +87,9 @@ class ClassificationProvider(OpenAIChatMixin):
                 log.warning("Classification model failed", model=model, error=e)
                 self._stats.inc("api_errors")
                 return None
+        log.warning("Classification request rejected after compat retries", model=model)
+        self._stats.inc("api_errors")
+        return None
 
     def _try_strip_compat_param(
         self, error: openai.BadRequestError, params: dict, model: str,

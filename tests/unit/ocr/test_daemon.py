@@ -24,8 +24,8 @@ class TestMain:
 
         assert result is None
         mock_bootstrap.assert_called_once_with(
-            processing_tag_id=unittest.mock.ANY,
-            pre_tag_id=unittest.mock.ANY,
+            get_processing_tag_id=unittest.mock.ANY,
+            get_pre_tag_id=unittest.mock.ANY,
         )
 
     @patch("ocr.daemon.run_polling_threadpool")

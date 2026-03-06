@@ -15,6 +15,7 @@ class LLMConcurrencyLimiter:
 
     def __init__(self) -> None:
         self._semaphore: threading.Semaphore | None = None
+        self._initialized: bool = False
 
     def init(self, max_concurrent: int) -> None:
         """Set the concurrency limit. ``0`` means unlimited."""
@@ -23,10 +24,21 @@ class LLMConcurrencyLimiter:
             log.info("LLM concurrency limiter enabled", max_concurrent=max_concurrent)
         else:
             self._semaphore = None
+        self._initialized = True
 
     @contextmanager
     def acquire(self) -> Generator[None, None, None]:
-        """Acquire a slot; no-op when unlimited."""
+        """Acquire a slot; no-op when unlimited.
+
+        Raises ``RuntimeError`` if :meth:`init` was never called, so that
+        a missing bootstrap step surfaces immediately rather than silently
+        degrading to unlimited concurrency.
+        """
+        if not self._initialized:
+            raise RuntimeError(
+                "LLMConcurrencyLimiter.acquire() called before init(); "
+                "ensure bootstrap_daemon() runs first"
+            )
         if self._semaphore is not None:
             self._semaphore.acquire()
             try:

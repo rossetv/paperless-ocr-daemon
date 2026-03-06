@@ -38,8 +38,8 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
 
 def main() -> None:
     result = bootstrap_daemon(
-        processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
-        pre_tag_id=lambda s: s.PRE_TAG_ID,
+        get_processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
+        get_pre_tag_id=lambda s: s.PRE_TAG_ID,
     )
     if result is None:
         return
