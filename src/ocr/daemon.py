@@ -17,6 +17,8 @@ from .worker import OcrProcessor
 
 def _process_document(doc: dict, settings: Settings) -> None:
     """Process a single Paperless document with its own HTTP session and provider."""
+    # Each thread gets its own PaperlessClient (and thus its own HTTP session)
+    # because httpx sessions are not thread-safe.
     paperless = PaperlessClient(settings)
     ocr_provider = OcrProvider(settings)
     try:
@@ -38,8 +40,8 @@ def _iter_docs_to_ocr(list_client: PaperlessClient, settings: Settings) -> Itera
 
 def main() -> None:
     result = bootstrap_daemon(
-        processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
-        pre_tag_id=lambda s: s.PRE_TAG_ID,
+        get_processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
+        get_pre_tag_id=lambda s: s.PRE_TAG_ID,
     )
     if result is None:
         return

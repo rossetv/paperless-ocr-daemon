@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import types
-from typing import Any, Generator, Iterable, TypedDict
+from typing import Any, Generator, Iterable, TypedDict, Unpack
 
 import httpx
 import structlog
@@ -23,6 +23,9 @@ RETRYABLE_HTTP_EXCEPTIONS = (httpx.RequestError, httpx.HTTPStatusError)
 PAPERLESS_CALL_EXCEPTIONS = (OSError, httpx.HTTPError, ValueError, KeyError)
 
 
+# TypedDict is used here because it maps directly to **kwargs with Unpack,
+# giving callers keyword-level type checking while remaining a plain dict
+# at runtime (no instantiation overhead, easy JSON serialisation).
 class DocumentMetadataUpdate(TypedDict, total=False):
     """Keyword arguments accepted by :meth:`PaperlessClient.update_document_metadata`."""
 
@@ -30,7 +33,7 @@ class DocumentMetadataUpdate(TypedDict, total=False):
     correspondent_id: int
     document_type_id: int
     document_date: str
-    tags: list[int]
+    tags: set[int]
     language: str
     custom_fields: list[dict]
 
@@ -177,23 +180,21 @@ class PaperlessClient:
     def update_document_metadata(
         self,
         doc_id: int,
-        **fields: Any,
+        **kwargs: Unpack[DocumentMetadataUpdate],
     ) -> None:
         """Update document metadata fields on Paperless.
 
-        Accepts any keys defined in :class:`DocumentMetadataUpdate`.
-        ``None`` values are silently dropped.
+        Accepts keyword arguments matching :class:`DocumentMetadataUpdate`.
+        Keys not provided (or absent) are silently skipped.
         """
-        payload = {}
-        for key, value in fields.items():
+        payload: dict[str, object] = {}
+        for key, api_field in self._METADATA_FIELDS.items():
+            value = kwargs.get(key)  # type: ignore[literal-required]
             if value is None:
                 continue
-            if key not in self._METADATA_FIELDS:
-                log.warning("Ignoring unknown metadata key", key=key, doc_id=doc_id)
-                continue
             if key == "tags":
-                value = list(value)
-            payload[self._METADATA_FIELDS[key]] = value
+                value = list(value)  # type: ignore[arg-type]
+            payload[api_field] = value
 
         if not payload:
             log.info("No metadata updates to apply", doc_id=doc_id)

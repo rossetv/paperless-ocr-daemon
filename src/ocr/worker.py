@@ -18,7 +18,7 @@ from common.tags import (
     get_latest_tags,
     release_processing_tag,
 )
-from common.utils import is_error_content
+from common.content_checks import is_error_content
 from .image_converter import bytes_to_images
 from .provider import OcrProvider
 from .text_assembly import OCR_ERROR_MARKER, assemble_full_text
@@ -71,7 +71,7 @@ class OcrProcessor:
                 return
 
             claimed = claim_processing_tag(
-                paperless_client=self.paperless_client,
+                client=self.paperless_client,
                 doc_id=self.doc_id,
                 tag_id=self.settings.OCR_PROCESSING_TAG_ID,
                 purpose="ocr",
@@ -213,6 +213,10 @@ class OcrProcessor:
         Mark the document as errored and remove all pipeline tags.
 
         Delegates to :func:`common.tags.finalize_document_with_error`.
+
+        This convenience wrapper exists so callers don't need to pass
+        ``self.paperless_client``, ``self.doc_id``, and ``self.settings``
+        at every call site.
         """
         finalize_document_with_error(
             self.paperless_client,

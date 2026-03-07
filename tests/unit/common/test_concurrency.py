@@ -11,10 +11,12 @@ from common.concurrency import llm_limiter
 
 @pytest.fixture(autouse=True)
 def _reset_semaphore():
-    """Reset the limiter's semaphore to None before each test."""
+    """Reset the limiter's state before each test."""
     llm_limiter._semaphore = None
+    llm_limiter._initialized = False
     yield
     llm_limiter._semaphore = None
+    llm_limiter._initialized = False
 
 class TestInitZero:
 
@@ -132,3 +134,12 @@ class TestLLMConcurrencyLimiterDirect:
         assert llm_limiter._semaphore is not None
         llm_limiter.init(0)
         assert llm_limiter._semaphore is None
+
+
+class TestUninitializedGuard:
+
+    def test_acquire_before_init_raises(self):
+        """Calling acquire() before init() should raise RuntimeError."""
+        with pytest.raises(RuntimeError, match="before init"):
+            with llm_limiter.acquire():
+                pass

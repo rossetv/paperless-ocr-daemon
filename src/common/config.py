@@ -76,9 +76,11 @@ class Settings:
         self.PAPERLESS_TOKEN = self._get_required_env("PAPERLESS_TOKEN")
 
     def _load_llm_settings(self) -> None:
-        self.LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
-        if self.LLM_PROVIDER not in ("openai", "ollama"):
+        _llm_provider = os.getenv("LLM_PROVIDER", "openai")
+        if _llm_provider not in ("openai", "ollama"):
             raise ValueError("LLM_PROVIDER must be 'openai' or 'ollama'")
+        # Validated above; narrow from str to Literal.
+        self.LLM_PROVIDER: Literal["openai", "ollama"] = _llm_provider  # type: ignore[assignment]
 
         if self.LLM_PROVIDER == "ollama":
             self.OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", _DEFAULT_OLLAMA_BASE_URL)
@@ -140,10 +142,11 @@ class Settings:
 
     def _load_logging_settings(self) -> None:
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-        log_format = os.getenv("LOG_FORMAT", "console")
-        if log_format not in ("json", "console"):
+        _log_format = os.getenv("LOG_FORMAT", "console")
+        if _log_format not in ("json", "console"):
             raise ValueError("LOG_FORMAT must be 'json' or 'console'")
-        self.LOG_FORMAT = log_format
+        # Validated above; narrow from str to Literal.
+        self.LOG_FORMAT: Literal["json", "console"] = _log_format  # type: ignore[assignment]
 
     def _load_classification_settings(self) -> None:
         self.CLASSIFY_PERSON_FIELD_ID = self._get_optional_int_env(

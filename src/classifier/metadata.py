@@ -15,10 +15,10 @@ log = structlog.get_logger(__name__)
 _LOCALE_SEP_RE: re.Pattern[str] = re.compile(r"[-_]")
 
 
-def parse_iso_date_prefix(value: str) -> dt.date | None:
+def parse_iso_date_prefix(value: str | None) -> dt.date | None:
     """Parse an ISO-8601 date string, stripping any ``T`` time suffix.
 
-    Returns ``None`` when *value* is empty or unparseable.
+    Returns ``None`` when *value* is ``None``, empty, or unparseable.
     """
     if not value:
         return None

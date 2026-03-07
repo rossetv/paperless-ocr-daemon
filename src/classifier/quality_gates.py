@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from common.constants import REFUSAL_PHRASES
-from common.utils import is_error_content
+from common.content_checks import is_error_content
 from .constants import GENERIC_DOCUMENT_TYPES
 from .normalizers import normalize_simple
 

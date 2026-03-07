@@ -40,8 +40,8 @@ class TestBootstrapDaemon:
         mock_paperless_cls.return_value = mock_client
 
         result = bootstrap_daemon(
-            processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
-            pre_tag_id=lambda s: s.PRE_TAG_ID,
+            get_processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
+            get_pre_tag_id=lambda s: s.PRE_TAG_ID,
         )
 
         assert result is not None
@@ -62,8 +62,8 @@ class TestBootstrapDaemon:
         mock_settings_cls.side_effect = ValueError("bad config")
 
         result = bootstrap_daemon(
-            processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
-            pre_tag_id=lambda s: s.PRE_TAG_ID,
+            get_processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
+            get_pre_tag_id=lambda s: s.PRE_TAG_ID,
         )
 
         assert result is None
@@ -77,8 +77,8 @@ class TestBootstrapDaemon:
         mock_configure_logging.side_effect = ValueError("bad log config")
 
         result = bootstrap_daemon(
-            processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
-            pre_tag_id=lambda s: s.PRE_TAG_ID,
+            get_processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
+            get_pre_tag_id=lambda s: s.PRE_TAG_ID,
         )
 
         assert result is None
@@ -107,8 +107,8 @@ class TestBootstrapDaemon:
         mock_preflight.side_effect = PreflightError("paperless unreachable")
 
         result = bootstrap_daemon(
-            processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
-            pre_tag_id=lambda s: s.PRE_TAG_ID,
+            get_processing_tag_id=lambda s: s.OCR_PROCESSING_TAG_ID,
+            get_pre_tag_id=lambda s: s.PRE_TAG_ID,
         )
 
         assert result is None

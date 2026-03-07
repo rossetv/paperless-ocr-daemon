@@ -17,13 +17,15 @@ class TestRecoverStaleLocks:
         assert result == 0
         client.get_documents_by_tag.assert_not_called()
 
-    def test_returns_zero_when_processing_tag_id_is_zero(self):
+    def test_processing_tag_id_zero_is_valid(self):
+        """Tag ID 0 is a valid Paperless tag ID and should trigger recovery."""
         client = MagicMock()
+        client.get_documents_by_tag.return_value = []
 
         result = recover_stale_locks(client, processing_tag_id=0, pre_tag_id=1)
 
         assert result == 0
-        client.get_documents_by_tag.assert_not_called()
+        client.get_documents_by_tag.assert_called_once_with(0)
 
     def test_recovers_single_stale_document(self):
         client = MagicMock()

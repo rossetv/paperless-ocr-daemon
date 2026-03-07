@@ -20,6 +20,8 @@ def _process_document(
     doc: dict, settings: Settings, taxonomy_cache: TaxonomyCache
 ) -> None:
     """Process a single Paperless document with its own HTTP session and provider."""
+    # Each thread gets its own PaperlessClient (and thus its own HTTP session)
+    # because httpx sessions are not thread-safe.
     paperless = PaperlessClient(settings)
     classifier = ClassificationProvider(settings)
     try:
@@ -52,8 +54,8 @@ def main() -> None:
     :class:`TaxonomyCache`, then enters the polling loop.
     """
     result = bootstrap_daemon(
-        processing_tag_id=lambda s: s.CLASSIFY_PROCESSING_TAG_ID,
-        pre_tag_id=lambda s: s.CLASSIFY_PRE_TAG_ID,
+        get_processing_tag_id=lambda s: s.CLASSIFY_PROCESSING_TAG_ID,
+        get_pre_tag_id=lambda s: s.CLASSIFY_PRE_TAG_ID,
     )
     if result is None:
         return

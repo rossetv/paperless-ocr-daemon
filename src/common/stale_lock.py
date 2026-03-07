@@ -17,7 +17,7 @@ def recover_stale_locks(
     pre_tag_id: int,
 ) -> int:
     """Find documents with a stale processing-lock tag and re-queue them."""
-    if not processing_tag_id:
+    if processing_tag_id is None:
         return 0
 
     recovered = 0
@@ -42,7 +42,7 @@ def recover_stale_locks(
         updated.discard(processing_tag_id)
         updated.add(pre_tag_id)
         try:
-            client.update_document_metadata(doc_id, tags=list(updated))
+            client.update_document_metadata(doc_id, tags=updated)
             recovered += 1
             log.info(
                 "Recovered stale processing lock",

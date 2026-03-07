@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import openai
 from PIL import Image
 
-from common.utils import is_error_content
+from common.content_checks import is_error_content
 from ocr.provider import OcrProvider
 
 def _make_settings(**overrides):

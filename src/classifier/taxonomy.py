@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import threading
 from typing import Callable, Iterable, NamedTuple
 
@@ -14,7 +15,23 @@ from .tag_filters import dedupe_tags
 log = structlog.get_logger(__name__)
 
 
-def _index_items(items: list[dict], normalizer) -> dict[str, dict]:
+# frozen dataclass: chosen over NamedTuple because this is part of the public
+# API (passed to classification providers), benefits from keyword-only
+# construction for clarity, and may gain optional fields in the future.
+@dataclasses.dataclass(frozen=True)
+class TaxonomyContext:
+    """Snapshot of taxonomy name lists used as LLM prompt context.
+
+    Groups the three taxonomy lists that are always passed together to
+    the classification provider, reducing parameter count.
+    """
+
+    correspondents: list[str]
+    document_types: list[str]
+    tags: list[str]
+
+
+def _index_items(items: list[dict], normalizer: Callable[[str], str]) -> dict[str, dict]:
     """
     Build a ``{normalized_name: item_dict}`` lookup from a Paperless listing.
 
@@ -33,7 +50,7 @@ def _index_items(items: list[dict], normalizer) -> dict[str, dict]:
 def _match_item(
     name: str,
     mapping: dict[str, dict],
-    normalizer,
+    normalizer: Callable[[str], str],
     allow_substring: bool,
 ) -> dict | None:
     """
@@ -67,7 +84,7 @@ def _get_usage_count(item: dict) -> int:
     for key in ("document_count", "documents_count", "documents"):
         if key not in item:
             continue
-        value = item.get(key)
+        value = item[key]
         if isinstance(value, int):
             return value
         if isinstance(value, str) and value.isdigit():
@@ -104,6 +121,11 @@ def _top_names(items: list[dict], limit: int) -> list[str]:
     return [entry["name"] for entry in sorted_items[:limit]]
 
 
+# NamedTuple: lightweight immutable record used as a short-lived internal
+# grouping of per-kind parameters (items list, lookup map, normalizer, etc.)
+# passed between private methods.  NamedTuple is preferred over dataclass here
+# because the value is created frequently, never mutated, and benefits from
+# tuple unpacking and minimal memory footprint.
 class _TaxonomyKind(NamedTuple):
     """Bundles the per-kind data needed by _get_or_create_item_id."""
 
@@ -149,6 +171,15 @@ class TaxonomyCache:
             )
             self._cached_tag_names = _top_names(self._tags, self._taxonomy_limit)
 
+    def taxonomy_context(self) -> TaxonomyContext:
+        """Return a frozen snapshot of taxonomy names for the LLM prompt."""
+        with self._lock:
+            return TaxonomyContext(
+                correspondents=list(self._cached_correspondent_names),
+                document_types=list(self._cached_document_type_names),
+                tags=list(self._cached_tag_names),
+            )
+
     def correspondent_names(self) -> list[str]:
         """Return correspondent names for the classification prompt."""
         with self._lock:
@@ -176,6 +207,23 @@ class TaxonomyCache:
             False, self._client.create_document_type, "document type",
         )
 
+    def _tag_kind(self) -> _TaxonomyKind:
+        matching_algorithm = self._infer_matching_algorithm()
+
+        def create_tag(name: str) -> dict:
+            return self._client.create_tag(name, matching_algorithm=matching_algorithm)
+
+        return _TaxonomyKind(
+            self._tags, self._tag_map, normalize_simple,
+            False, create_tag, "tag",
+        )
+
+    @staticmethod
+    def _extract_id(item: dict) -> int | None:
+        """Extract and validate the ``id`` field from a Paperless API item."""
+        value = item.get("id")
+        return value if isinstance(value, int) else None
+
     def _get_or_create_item_id(
         self, name: str, kind_factory: Callable[[], _TaxonomyKind],
     ) -> int | None:
@@ -186,7 +234,7 @@ class TaxonomyCache:
             kind = kind_factory()
             matched = _match_item(name, kind.mapping, kind.normalizer, kind.allow_substring)
             if matched:
-                return matched.get("id")
+                return self._extract_id(matched)
             try:
                 created = kind.creator(name.strip())
             except PAPERLESS_CALL_EXCEPTIONS:
@@ -195,17 +243,21 @@ class TaxonomyCache:
                     item_label=kind.label,
                     name=name,
                 )
-                self.refresh()
+                try:
+                    self.refresh()
+                except PAPERLESS_CALL_EXCEPTIONS:
+                    log.warning("Cache refresh also failed", item_label=kind.label)
+                    raise
                 kind = kind_factory()
                 matched = _match_item(
                     name, kind.mapping, kind.normalizer, kind.allow_substring,
                 )
                 if matched:
-                    return matched.get("id")
+                    return self._extract_id(matched)
                 raise
             kind.items.append(created)
             kind.mapping[kind.normalizer(created.get("name", name))] = created
-            return created.get("id")
+            return self._extract_id(created)
 
     def get_or_create_correspondent_id(self, name: str) -> int | None:
         return self._get_or_create_item_id(name, self._correspondent_kind)
@@ -220,31 +272,12 @@ class TaxonomyCache:
         The ``matching_algorithm`` for new tags is inferred from existing tags
         (int ``0`` vs string ``"none"``) so the new tag uses the same format.
         """
-        matching_algorithm = self._infer_matching_algorithm()
         ids: list[int] = []
         for tag in dedupe_tags(tags):
-            with self._lock:
-                matched = _match_item(tag, self._tag_map, normalize_simple, False)
-                if matched:
-                    ids.append(matched.get("id"))
-                    continue
-                try:
-                    created = self._client.create_tag(
-                        tag.strip(), matching_algorithm=matching_algorithm
-                    )
-                except PAPERLESS_CALL_EXCEPTIONS:
-                    log.warning("Failed to create tag; refreshing cache", name=tag)
-                    self.refresh()
-                    matching_algorithm = self._infer_matching_algorithm()
-                    matched = _match_item(tag, self._tag_map, normalize_simple, False)
-                    if matched:
-                        ids.append(matched.get("id"))
-                        continue
-                    raise
-                self._tags.append(created)
-                self._tag_map[normalize_simple(created.get("name", tag))] = created
-                ids.append(created.get("id"))
-        return [tag_id for tag_id in ids if tag_id is not None]
+            tag_id = self._get_or_create_item_id(tag, self._tag_kind)
+            if tag_id is not None:
+                ids.append(tag_id)
+        return ids
 
     def _infer_matching_algorithm(self) -> int | str:
         """

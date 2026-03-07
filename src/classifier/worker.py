@@ -95,7 +95,7 @@ class ClassificationProcessor:
                 return
 
             claimed = claim_processing_tag(
-                paperless_client=self.paperless_client,
+                client=self.paperless_client,
                 doc_id=self.doc_id,
                 tag_id=self.settings.CLASSIFY_PROCESSING_TAG_ID,
                 purpose="classification",
@@ -120,9 +120,7 @@ class ClassificationProcessor:
 
             result, model = self.classifier.classify_text(
                 input_text,
-                self.taxonomy_cache.correspondent_names(),
-                self.taxonomy_cache.document_type_names(),
-                self.taxonomy_cache.tag_names(),
+                self.taxonomy_cache.taxonomy_context(),
                 truncation_note="\n".join(truncation_notes) if truncation_notes else None,
             )
 
@@ -205,7 +203,8 @@ class ClassificationProcessor:
         try:
             self.paperless_client.update_document_metadata(self.doc_id, tags=updated)
         except PAPERLESS_CALL_EXCEPTIONS:
-            log.exception("Failed to requeue document for OCR", doc_id=self.doc_id)
+            log.exception("Failed to requeue document for OCR; marking error", doc_id=self.doc_id)
+            self._finalize_with_error(tags)
             return
         log.info("Requeued document for OCR", doc_id=self.doc_id)
 
@@ -214,6 +213,10 @@ class ClassificationProcessor:
         Mark the document with an error tag and clear pipeline tags.
 
         Delegates to :func:`common.tags.finalize_document_with_error`.
+
+        This convenience wrapper exists so callers don't need to pass
+        ``self.paperless_client``, ``self.doc_id``, and ``self.settings``
+        at every call site.
         """
         finalize_document_with_error(
             self.paperless_client,

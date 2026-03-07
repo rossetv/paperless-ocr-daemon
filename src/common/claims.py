@@ -12,7 +12,7 @@ log = structlog.get_logger(__name__)
 
 def claim_processing_tag(
     *,
-    paperless_client: PaperlessClient,
+    client: PaperlessClient,
     doc_id: int,
     tag_id: int | None,
     purpose: str,
@@ -26,7 +26,7 @@ def claim_processing_tag(
         return True
 
     try:
-        latest = paperless_client.get_document(doc_id)
+        latest = client.get_document(doc_id)
     except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to refresh document before claiming processing tag",
@@ -49,7 +49,7 @@ def claim_processing_tag(
     updated_tags = set(current_tags)
     updated_tags.add(tag_id)
     try:
-        paperless_client.update_document_metadata(doc_id, tags=updated_tags)
+        client.update_document_metadata(doc_id, tags=updated_tags)
     except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to claim processing tag",
@@ -60,7 +60,7 @@ def claim_processing_tag(
         return False
 
     try:
-        verified = paperless_client.get_document(doc_id)
+        verified = client.get_document(doc_id)
     except PAPERLESS_CALL_EXCEPTIONS:
         log.exception(
             "Failed to refresh document after claiming processing tag",
