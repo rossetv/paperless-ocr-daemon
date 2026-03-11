@@ -287,7 +287,7 @@ The `AI_MODELS` setting defines an ordered list of models to try. For each page,
 3. Continues down the chain until one succeeds or all fail
 
 Default chains:
-- **OpenAI:** `gpt-5-mini` → `gpt-5.2` → `o4-mini`
+- **OpenAI:** `gpt-5-mini` → `gpt-5.4` → `o4-mini`
 - **Ollama:** `gemma3:27b` → `gemma3:12b`
 
 This lets you use cheaper/faster models for most pages and fall back to more capable ones only when needed.
@@ -311,7 +311,7 @@ After all pages are OCR'd, the text is assembled into a single document:
 --- Page 2 ---
 [transcribed text of page 2]
 
-Transcribed by model: gpt-5-mini, gpt-5.2
+Transcribed by model: gpt-5-mini, gpt-5.4
 ```
 
 If `OCR_INCLUDE_PAGE_MODELS=true`, each page header includes the model used:
@@ -532,7 +532,7 @@ All configuration is via environment variables. No config files are needed.
 | `LLM_PROVIDER` | AI provider to use: `openai` or `ollama` | `openai` | No |
 | `OPENAI_API_KEY` | OpenAI API key | — | Yes if `openai` |
 | `OLLAMA_BASE_URL` | Ollama API base URL (must end with `/v1/`) | `http://localhost:11434/v1/` | Yes if `ollama` |
-| `AI_MODELS` | Comma-separated model fallback chain. Tried in order; first success wins. | OpenAI: `gpt-5-mini,gpt-5.2,o4-mini`<br>Ollama: `gemma3:27b,gemma3:12b` | No |
+| `AI_MODELS` | Comma-separated model fallback chain. Tried in order; first success wins. | OpenAI: `gpt-5-mini,gpt-5.4,o4-mini`<br>Ollama: `gemma3:27b,gemma3:12b` | No |
 
 ### OCR Settings
 
@@ -541,7 +541,7 @@ All configuration is via environment variables. No config files are needed.
 | `OCR_DPI` | DPI for rasterizing PDF pages to images. Higher = better accuracy, larger images. | `300` |
 | `OCR_MAX_SIDE` | Max pixel dimension of the longest side. Images are thumbnailed to fit within this before being sent to the vision API. | `1600` |
 | `OCR_REFUSAL_MARKERS` | Comma-separated phrases (case-insensitive) that indicate a model refused to transcribe. If detected, the next model in the chain is tried. | `i can't assist, i cannot assist, i can't help with transcrib, i cannot help with transcrib, CHATGPT REFUSED TO TRANSCRIBE` |
-| `OCR_INCLUDE_PAGE_MODELS` | If `true`, page headers include the model name (e.g. `--- Page 2 (gpt-5.2) ---`). | `false` |
+| `OCR_INCLUDE_PAGE_MODELS` | If `true`, page headers include the model name (e.g. `--- Page 2 (gpt-5.4) ---`). | `false` |
 
 ### Classification Settings
 
